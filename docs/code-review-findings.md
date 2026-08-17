@@ -11,42 +11,73 @@ I could not settle are marked as such.
 
 ## 1. Will break in use
 
-### 1.1 Send failures spin a hot loop that also destroys the evidence
+### 1.1 On send failure, `app.py` reconnects — the one thing the driver forbids for this firmware
 
-`app.py:44-53` — on send failure the loop closes the device and `continue`s
-with **no sleep anywhere on that path**:
+> **Revised after adversarial review.** My first version of this finding called
+> it a CPU-burning hot loop that shreds its own logs. That severity was wrong,
+> and the fix I proposed (add backoff to the send path) would have preserved the
+> actual bug. Corrected reasoning below; the original claim is retained in §1.1a
+> so the error is legible.
+
+The quirk row for our exact fingerprint `(0x0416, 0x5302, 0x0407)` sets
+`keepalive_stream=True` (`trcc/core/models.py:360-368`). That flag changes
+trcc's send contract, in `trcc/core/ports.py:337-352`:
 
 ```python
-if not panel.connected:
-    try:
-        panel.connect(); backoff = 1.0     # ← reset on every successful connect
-    except Exception:
-        time.sleep(backoff); backoff = min(backoff * 2, 60); continue
-img = _frame(shared, cfg)                  # full render, every iteration
-try:
-    ok = panel.send(img)
-except Exception:
-    panel.close(); continue                # ← no sleep
-if not ok:
-    panel.close(); continue                # ← no sleep
-time.sleep(...)                            # only reached on success
+except Exception as e:
+    if attempt == 0 and not self._quirks.keepalive_stream:
+        ...  # reconnect and retry
+    if self._quirks.keepalive_stream:
+        # Single-session firmware: a close→reopen wedges the panel
+        # until a physical replug (#228), so NEVER reconnect — soft-
+        # fail and let the next keepalive tick resend the frame.
+        log.debug(...)
+        return False
 ```
 
-If the panel is *present but wedged* — firmware hiccup, half-dead cable, a hub
-that enumerates but won't accept writes — `connect()` keeps succeeding, so the
-backoff branch is never entered and `backoff` is re-reset to 1.0 every pass. The
-loop becomes: connect → render → send fails → close → connect → … at full CPU,
-hammering HID open/close, with a wasted 4.7 ms render on every iteration.
+Two consequences the review originally missed:
 
-The second-order damage is worse than the CPU: at hundreds of iterations per
-second each logging a `panel send failed` line, the
-`RotatingFileHandler(maxBytes=1_000_000, backupCount=3)` in `__main__.py:89`
-churns through all four log files in seconds. **The failure erases the log
-history needed to diagnose it** — and the README's troubleshooting advice is
-"check `~/Library/Logs/claude-trofeo-hud/hud.log`."
+1. **`app.py:46`'s `except Exception` around `send` is effectively dead code.**
+   For this panel trcc converts transport errors into `return False` and never
+   raises them. The live failure path is `if not ok` at `app.py:50`.
+2. **`app.py:50-53` answers `not ok` with `panel.close(); continue`** — a full
+   teardown and re-handshake. That is precisely the close→reopen the driver
+   says "wedges the panel until a physical replug (#228)."
 
-Fix: apply the same capped backoff to the send path (and rate-limit or
-`log.debug` the repeated failure line). One change addresses both.
+So the daemon's response to a transient soft failure is the action most likely
+to turn it into a hard one. Each attempt also costs a **≥3 s blackout**:
+`_connect_streaming_firmware` opens with an unconditional
+`time.sleep(_QUIRK_BOOT_SETTLE_S)` where `_QUIRK_BOOT_SETTLE_S = 3.0`
+(`trcc/adapters/device/hid_lcd.py:57,161`). The README's "Unplug/replug is
+handled automatically with backoff" is the opposite of what this firmware wants.
+
+**Fix:** on `not ok`, skip the frame and fall through to the normal pacing
+sleep — do not close. Let the next keepalive tick resend, which is what trcc's
+comment instructs. Track consecutive soft failures and log at intervals rather
+than per frame. Reserve `panel.close()` + reconnect for a raised
+`DeviceDisconnectedError` (genuine unplug), not for a `False` return.
+
+#### 1.1a What I originally claimed, and why it was wrong
+
+I claimed that a present-but-wedged panel produces a sleepless loop —
+connect → render → send fails → close → connect — burning a core and churning
+through all four rotating log files in seconds, erasing the evidence.
+
+The control-flow reading was accurate: there genuinely is no sleep on either
+send-failure path, `close()` sets `_dev = None` so the next pass re-enters
+`connect()`, and `backoff` is re-reset to 1.0 on every successful connect
+(`app.py:34`). What I never traced was `connect()` itself. The 3.0 s boot-settle
+sleep hard-caps the loop at roughly one iteration per 3 seconds, so there is no
+CPU burn and, at a few log lines per cycle, filling 4 MB of logs takes hours,
+not seconds.
+
+The trigger was also narrower than I implied: "connect keeps succeeding while
+send keeps failing" requires a panel that answers a `DA DB DC DD` handshake but
+rejects frames. Silence instead falls through to `_handshake_retry` and finally
+`HandshakeError`, which *does* land in the backoff branch.
+
+Lesson worth keeping: I reasoned about the app's loop without reading the
+driver it calls into, and got both the severity and the remedy wrong.
 
 ### 1.2 A malformed `config.toml` crash-loops the launchd agent every 10 s
 
@@ -69,10 +100,22 @@ The sharp end is `agent.py:32-33`: `KeepAlive: True` with
 crash-loops the agent **every 10 seconds, indefinitely**, with the traceback
 going to `agent-stderr.log` where nobody is looking.
 
-Fix: widen the `except` to include `ValueError` (or wrap each field), and clamp
-`fps` and `jpeg_quality` to sane ranges while you're there. `jpeg_quality`
-above 95 is counterproductive in Pillow and `fps = 0` divides by zero at
-`app.py:54`.
+Two further escapes, found in adversarial review and verified empirically — they
+matter because they change the *kind* of fix needed, not just its degree:
+
+| `config.toml` content | Raises |
+|---|---|
+| `fps = "fast"` | `ValueError: could not convert string to float` |
+| `start = "25:00"` | `ValueError: hour must be in 0..23` |
+| `start = 22:00:00` (TOML **native time literal** — a plausible thing to write) | `TypeError: fromisoformat: argument must be str` |
+| `night = "off"` (as a value rather than a `[night]` table — an easy confusion, since `mode` takes `"off"`) | `AttributeError: 'str' object has no attribute 'get'` |
+
+Fix: widening the `except` to `ValueError` — my original recommendation — is
+**insufficient**; it still crash-loops on the last two. Catch
+`(ValueError, TypeError, AttributeError)` around the whole parse block, or
+validate per field. Clamp `fps` and `jpeg_quality` to sane ranges while you're
+there: `jpeg_quality` above 95 is counterproductive in Pillow, and `fps = 0`
+divides by zero at `app.py:54`.
 
 ### 1.3 The OAuth token expires and nobody refreshes it — by design, unattended
 
@@ -104,9 +147,12 @@ granted, or you're logged out."
 ### 1.4 `npx -y ccusage@latest` runs unpinned third-party code every 60 s
 
 `collectors/tokens.py:20` — `["npx", "-y", "ccusage@latest", …]`, on a 60-second
-cadence, inside the process that holds the OAuth access token in memory, under a
-launchd agent the README tells the user to grant **"Always Allow"** Keychain
-access.
+cadence, in a process that reads the OAuth access token from the Keychain every
+60 seconds, under a launchd agent the README tells the user to grant
+**"Always Allow"** Keychain access. (To be precise about the blast radius: the
+token is fetched transiently by the *limits* collector rather than held for the
+process lifetime. The standing Keychain grant is the real exposure — any code
+running in this process can re-read it on demand.)
 
 `-y` suppresses the install confirmation and `@latest` never pins a version, so
 whenever npm's cached dist-tag metadata does refresh, the process
@@ -278,6 +324,14 @@ in untested code, and each is straightforwardly testable without hardware:
 on `send` (that test *is* §1.1), the collectors against captured JSON fixtures —
 the endpoint capture in `usage-endpoint.md` is ready to serve as one.
 
+**The first command in the README fails on a fresh clone.** `__main__.py:27`
+defaults `preview` to `out/preview.png`, but `.gitignore:7` ignores `out/` and
+nothing creates it — `git ls-files out/` is empty, so a fresh clone has no such
+directory and Pillow raises `FileNotFoundError` before rendering anything. The
+README's Setup section lists `preview` as the first thing a new user runs.
+`mkdir -p` the parent in the preview branch, the way `_setup_logging` already
+does for `log_dir`.
+
 **Repo hygiene.** `src/claude_trofeo_hud/__init__.py` is leftover `uv init`
 scaffolding (`print("Hello from claude-trofeo-hud!")`); the real package lives at
 the repo root via `module-root = ""`. Delete `src/`. `uv.lock` is modified and
@@ -296,18 +350,30 @@ neither contains secrets.
 
 ## Suggested order
 
-1. Backoff on send failure (§1.1) — the only finding that burns a core and eats
-   its own logs.
-2. Widen the config `except` + clamp ranges (§1.2) — one-line fix, prevents an
-   indefinite crash-loop.
-3. Pin the ccusage version (§1.4) — one-line fix, largest security reduction.
-4. Pre-flight `expiresAt` → "AUTH EXPIRED" state (§1.3) — makes the most likely
+Sequenced work plan: [docs/plans/review-remediation.md](plans/review-remediation.md).
+
+1. **Stop reconnecting on soft send failure (§1.1)** — risks wedging the panel
+   until physical replug, per the driver's own warning.
+2. **Guard config parsing against `ValueError`/`TypeError`/`AttributeError`
+   (§1.2)** — prevents an indefinite 10 s launchd crash-loop.
+3. **Pin the ccusage version (§1.4)** — one-line change, largest security
+   reduction.
+4. **Pre-flight `expiresAt` → "AUTH EXPIRED" (§1.3)** — makes the most likely
    unattended failure legible.
 5. Refuse cross-host redirects on the usage request (§1.5).
 6. Merge `limits[]` for the per-model weekly cap (see
    [usage-endpoint.md](usage-endpoint.md)) — the one materially missing gauge.
 7. Reconcile the week-window mismatch (§2); thread `jpeg_quality`, add the
-   activity stale indicator, size the hourly buckets to 24, and show the date on
-   the weekly reset (§3).
+   activity stale indicator, size the hourly buckets to 24, show the date on the
+   weekly reset, and create `out/` for `preview` (§3).
 8. Backfill collector and config tests, starting with the ones that pin §1.1
    and §1.2.
+
+## Provenance
+
+Written from a direct read of the package plus live verification of the usage
+endpoint and ccusage output. Independently re-verified by an adversarial review
+agent instructed to refute rather than agree; it confirmed most findings,
+**overturned the severity and the proposed fix for §1.1**, showed §1.2's fix was
+incomplete, and surfaced the fresh-clone `preview` failure. Corrections are
+marked inline rather than silently folded in.
