@@ -23,7 +23,9 @@ the window you already are. Fill short of the tick means you're using the
 window slower than the clock is spending it; fill past it means you'll run out
 before the reset. It appears only on the 7-day bars, whose length is a fixed
 span — the 5-hour session window is documented as rolling, so "fraction
-elapsed" isn't a meaningful quantity there.
+elapsed" isn't a meaningful quantity there. The 7-day anchor is assumed to be
+a full fixed span; if an account's *first* weekly window is short, the tick is
+optimistic for that window only.
 
 The per-model weekly cap (`Fable only`) is absent on most accounts; when the
 API doesn't report it, the row is dropped and the column closes up rather than

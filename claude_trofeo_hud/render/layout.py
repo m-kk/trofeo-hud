@@ -199,27 +199,35 @@ def _activity_zone(d: ImageDraw.ImageDraw, state: HudState, x0: int, x1: int) ->
     )
     d.line((x, 168, xr, 168), fill=theme.BORDER)
 
-    w.status_dot(d, x + 9, 200, 9, a.active)
-    d.text(
-        (x + 32, 186),
-        "ACTIVE" if a.active else "IDLE",
-        font=theme.sans(26),
-        fill=theme.GOOD if a.active else theme.MUTED,
-    )
+    # A stale reading must not pass for a live one: the collector has gone
+    # quiet, so we can't claim ACTIVE, and the session below it is dimmed.
+    live = a.active and not a.stale
+    w.status_dot(d, x + 9, 200, 9, live)
+    if a.stale:
+        status, status_color = "STALE", theme.STALE
+    elif a.active:
+        status, status_color = "ACTIVE", theme.GOOD
+    else:
+        status, status_color = "IDLE", theme.MUTED
+    d.text((x + 32, 186), status, font=theme.sans(26), fill=status_color)
+
+    fg = theme.STALE if a.stale else theme.FG
+    accent = theme.STALE if a.stale else theme.ACCENT
+    muted = theme.STALE if a.stale else theme.MUTED
 
     y = 240
     if a.project:
-        d.text((x, y), a.project, font=theme.mono(22), fill=theme.FG)
+        d.text((x, y), a.project, font=theme.mono(22), fill=fg)
         y += 36
     if a.model:
-        d.text((x, y), a.model, font=theme.sans(22), fill=theme.ACCENT)
+        d.text((x, y), a.model, font=theme.sans(22), fill=accent)
         y += 34
-    if a.active and a.burn_rate_tpm:
+    if live and a.burn_rate_tpm:
         d.text(
             (x, y),
             f"{w.fmt_tokens(a.burn_rate_tpm)} tok/min",
             font=theme.mono(20),
-            fill=theme.MUTED,
+            fill=muted,
         )
 
 

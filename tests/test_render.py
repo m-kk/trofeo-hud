@@ -29,6 +29,33 @@ def test_render_empty_state_does_not_crash():
     assert img.size == (WIDTH, HEIGHT)
 
 
+def _count(img: Image.Image, color: str, band: tuple[int, int]) -> int:
+    """Pixels of `color` in the right column between two y bounds."""
+    rgb = tuple(int(color[i : i + 2], 16) for i in (1, 3, 5))
+    return sum(
+        img.getpixel((x, y)) == rgb for y in range(*band) for x in range(960, WIDTH)
+    )
+
+
+def test_stale_activity_is_not_shown_as_live():
+    """A quiet collector must not keep claiming ACTIVE with a live-looking dot."""
+    live = mock_state(NOW)
+    stale = mock_state(NOW)
+    stale.activity.stale = True
+
+    assert _count(render(live), theme.GOOD, (180, 340)) > 0
+    assert _count(render(stale), theme.GOOD, (180, 340)) == 0
+
+
+def test_stale_activity_dims_the_session_block():
+    stale = mock_state(NOW)
+    stale.activity.stale = True
+    # The model line is the only ACCENT text below the rule.
+    assert _count(render(mock_state(NOW)), theme.ACCENT, (230, 300)) > 0
+    assert _count(render(stale), theme.ACCENT, (230, 300)) == 0
+    assert _count(render(stale), theme.STALE, (180, 300)) > 0
+
+
 def test_render_stale_sections_do_not_crash():
     state = mock_state(NOW)
     state.limits.stale = True
