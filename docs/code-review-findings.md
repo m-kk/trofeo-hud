@@ -285,8 +285,21 @@ stretches the effective cadence past three minutes. Not a bug, but it means the
 **No backoff or 429 handling on the usage endpoint.** A 429 marks the section
 stale and retries in exactly 60 s, forever. The endpoint exposes no
 `Retry-After`, so a modest client-side backoff on repeated failures is the only
-polite option. 1,440 requests/day is likely fine; hammering through a throttle
-is not.
+polite option.
+
+This turned out to be **more than theoretical**. The ~12 requests made while
+exploring the endpoint (several of them deliberately unauthenticated) tripped a
+rate limit that then rejected a *valid* token for **over six minutes** — four
+retries spaced 0, 60, 120 and 180 seconds apart all came back 429. A collector
+that retries every 60 s regardless would have spent that whole window generating
+rejections, quite possibly extending it. Steady-state polling at 60 s is clearly
+fine, since the daemon has run that way; recovery from a throttle is what needs
+the backoff.
+
+Consequence worth noting: this is also why the refactored collector in the
+auth-expiry PR could not be verified against the live endpoint — the account was
+still locked out when the work was submitted. The change is covered by faked-HTTP
+unit tests only.
 
 **`PATH` can get `.` injected into the daemon's environment.**
 `agent.py:21` — `Path(shutil.which("npx") or "").parent` evaluates to `Path(".")`

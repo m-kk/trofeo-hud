@@ -1,5 +1,37 @@
 # Plan — remediate part-1 review findings
 
+> **Status: implemented and submitted upstream 2026-08-17.** All five §1 findings
+> are fixed, test-first, across four PRs against
+> `christensen143/claude-trofeo-hud` (we have only READ there, so the work went
+> via a fork at `m-kk/claude-trofeo-hud`). Merging is upstream's call.
+>
+> | PR | Covers | Diff | Tests |
+> |---|---|---|---|
+> | [#3](https://github.com/christensen143/claude-trofeo-hud/pull/3) `fix/panel-soft-failure` | §1.1 + test scaffolding (Step 0) | +310/−11 | 14 |
+> | [#4](https://github.com/christensen143/claude-trofeo-hud/pull/4) `fix/config-hardening` | §1.2 + the fresh-clone `preview` fix | +251/−30 | 25 |
+> | [#5](https://github.com/christensen143/claude-trofeo-hud/pull/5) `fix/pin-ccusage` | §1.4 | +239/−9 | 14 |
+> | [#6](https://github.com/christensen143/claude-trofeo-hud/pull/6) `fix/limits-auth-and-redirects` | §1.3 + §1.5 + the null-utilization gauge | +559/−72 | 21 |
+>
+> Each branch is cut from `main`, so the PRs are independent and all four report
+> `MERGEABLE`. #5 and #6 both touch `README.md` in different sections; whichever
+> merges second may need a trivial rebase.
+>
+> **Deviations from the plan below:**
+> - Steps 4 and 5 shipped as one PR (#6) — both rewrite `limits.py`, so splitting
+>   them would have guaranteed a conflict between two of our own PRs.
+> - Step 0's scaffolding shipped inside #3, its first consumer, rather than as a
+>   standalone PR with no behaviour change to justify it.
+> - **Did not** drop the `anthropic-beta` header, though the plan said to.
+>   Verified unnecessary, but removing it changes wire behaviour against an
+>   undocumented endpoint for no benefit — the wrong risk to take in someone
+>   else's repo.
+> - **Did not** add 429 backoff. It belongs in `base.py`'s cadence handling
+>   rather than bolted onto one collector; noted as follow-up in #6.
+> - The TOML native time literal is now *accepted* rather than rejected. The plan
+>   assumed it should fall back to defaults; honouring it is friendlier, since
+>   TOML has a real time type.
+
+
 Addresses the five "will break in use" findings in
 [../code-review-findings.md](../code-review-findings.md) §1, plus the §1.2
 follow-through that adversarial review showed was needed.
