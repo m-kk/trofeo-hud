@@ -49,23 +49,37 @@ coverage. Collectors, config, and the main loop had **zero** tests before this.
 Deliberately out of scope for the remediation PRs — these are correctness and
 feature work, not operational failures:
 
-1. **Per-model weekly cap is invisible.** `seven_day_opus`/`seven_day_sonnet`
-   are null on this account, but the `limits[]` array carries a real weekly
-   Fable cap. That window exists *only* there, and on Max it is often the
-   binding constraint. Claude Code reads both paths and merges; we read neither.
-   Highest-value remaining item.
-2. **Week-window mismatch.** `tokens.py` sums a Monday-anchored calendar week;
-   the WEEK gauge shows the server's rolling 7-day window. They are rendered
+1. **Week-window mismatch.** `tokens.py` sums a Monday-anchored calendar week;
+   the weekly gauge shows the server's rolling 7-day window. They are rendered
    adjacently and disagree.
-3. **§3 output issues:** `jpeg_quality` is documented but hardcoded; the
-   activity zone has no stale indicator; `progress_bar` overstates values under
-   ~5.5%; the weekly reset shows a bare time-of-day for a date days out;
-   `activity.py`'s hourly bucket list can `IndexError` at an hour boundary.
-4. **429 backoff.** Belongs in `base.py`'s cadence handling. Exploration tripped
-   a rate limit that rejected a valid token for over six minutes, so this is
-   real, not theoretical.
-5. **`severity` not adopted** for warn/critical colours — only `normal` has ever
+2. **§3 output issues:** `jpeg_quality` is documented but hardcoded;
+   `progress_bar` overstates values under ~5.5% (the minimum fill is a full
+   pill cap); `activity.py`'s hourly bucket list can `IndexError` at an hour
+   boundary.
+3. **`severity` not adopted** for warn/critical colours — only `normal` has ever
    been observed and it is absent from Claude Code's own schema.
+4. **Is the 5-hour window anchored or rolling?** Decides whether the pace tick
+   can appear on the session bar. Two samples of `five_hour.resets_at` a few
+   minutes apart while active would settle it; both attempts on 2026-08-17 hit
+   429 with a valid token.
+
+## Done in the layout redesign (2026-08-17)
+
+Branch `explore`, pushed to `fork`. Closes four items from the list above:
+
+- **Gauge rows.** Label + value on one line, that row's bar directly beneath,
+  laid out in sequence — `gauge_rows()` is the single source of the left
+  column's geometry, so an absent window closes up instead of drawing an empty
+  bar.
+- **Per-model weekly cap** (Fable), read from `limits[]` — the only place it
+  appears when `seven_day_opus`/`seven_day_sonnet` are null.
+- **Plan tier** from the Keychain: `subscriptionType` + `rateLimitTier`.
+- **Pace tick** on the weekly bars: where even-pace usage would be. Omitted on
+  the session bar while its window's anchor is unconfirmed.
+- **Activity stale indicator**, and a weekly reset that names the weekday.
+- **429 backoff** in `base.py`: exponential from cadence to a 15-minute cap,
+  honouring `Retry-After`, reset on success — with one warning line per
+  failure instead of a traceback a minute.
 
 ## Local repo state
 

@@ -12,8 +12,10 @@ import json
 import logging
 import re
 import subprocess
+import urllib.error
 import urllib.request
-from datetime import datetime
+from datetime import UTC, datetime
+from email.utils import parsedate_to_datetime
 
 from ..state import LimitGauge, Limits
 from .base import Collector
@@ -31,6 +33,41 @@ _WEEK_WINDOW_S = 7 * 86400
 # meaningless. Left unset until the anchor is confirmed against live data.
 _SESSION_WINDOW_S = None
 _FABLE = "Fable"
+
+
+class Throttled(Exception):
+    """HTTP 429 from the usage endpoint.
+
+    The endpoint answers 429 both for genuine throttling and for an expired
+    or malformed token (docs/usage-endpoint.md), so this deliberately doesn't
+    claim to know which. `retry_after_s` carries the server's own hint when
+    it sends one; the collector's backoff uses it.
+    """
+
+    def __init__(self, retry_after: float | None) -> None:
+        self.retry_after_s = retry_after
+        super().__init__(
+            "429 from the usage endpoint — throttled, or the OAuth token "
+            "expired; the response can't tell us which"
+        )
+
+
+def retry_after_s(err: urllib.error.HTTPError) -> float | None:
+    """Seconds from a Retry-After header, in either RFC 7231 form."""
+    raw = (err.headers or {}).get("Retry-After")
+    if not raw:
+        return None
+    try:
+        return float(int(str(raw).strip()))
+    except ValueError:
+        pass
+    try:
+        when = parsedate_to_datetime(str(raw))
+    except (TypeError, ValueError):
+        return None
+    if when.tzinfo is None:
+        when = when.replace(tzinfo=UTC)
+    return max(0.0, (when - datetime.now(UTC)).total_seconds())
 
 
 def _oauth() -> dict:
@@ -125,8 +162,13 @@ class LimitsCollector(Collector):
                 "Content-Type": "application/json",
             },
         )
-        with urllib.request.urlopen(req, timeout=_TIMEOUT_S) as resp:
-            data = json.loads(resp.read())
+        try:
+            with urllib.request.urlopen(req, timeout=_TIMEOUT_S) as resp:
+                data = json.loads(resp.read())
+        except urllib.error.HTTPError as err:
+            if err.code == 429:
+                raise Throttled(retry_after_s(err)) from None
+            raise
 
         limits = parse_usage(
             data,

@@ -4,12 +4,20 @@ Shapes here mirror docs/usage-endpoint.md, including the account where the
 top-level per-model keys are null and the Fable cap exists only in limits[].
 """
 
-from datetime import datetime
+import urllib.error
+from datetime import UTC, datetime, timedelta
+from email.utils import format_datetime
 
+import pytest
+
+from claude_trofeo_hud.collectors import limits as mod
+from claude_trofeo_hud.collectors.base import SharedState
 from claude_trofeo_hud.collectors.limits import (
     _WEEK_WINDOW_S,
+    Throttled,
     parse_usage,
     plan_label,
+    retry_after_s,
 )
 
 _SAMPLE = {
@@ -116,3 +124,77 @@ def test_plan_label_without_a_recognisable_multiplier():
 
 def test_plan_label_absent_subscription():
     assert plan_label(None, "default_claude_max_5x") is None
+
+
+# ── Throttling ───────────────────────────────────────────────────────────
+
+
+def _http_error(code: int, headers: dict | None = None) -> urllib.error.HTTPError:
+    return urllib.error.HTTPError(
+        mod._USAGE_URL, code, "Too Many Requests", headers or {}, None
+    )
+
+
+def test_retry_after_in_seconds():
+    assert retry_after_s(_http_error(429, {"Retry-After": "30"})) == 30.0
+
+
+def test_retry_after_as_an_http_date():
+    when = datetime.now(UTC) + timedelta(seconds=120)
+    got = retry_after_s(_http_error(429, {"Retry-After": format_datetime(when)}))
+    assert got is not None and 100 <= got <= 130
+
+
+def test_retry_after_absent_or_unparseable():
+    assert retry_after_s(_http_error(429)) is None
+    assert retry_after_s(_http_error(429, {"Retry-After": "soon"})) is None
+
+
+def test_a_past_http_date_does_not_produce_a_negative_wait():
+    when = datetime.now(UTC) - timedelta(seconds=60)
+    assert (
+        retry_after_s(_http_error(429, {"Retry-After": format_datetime(when)})) == 0.0
+    )
+
+
+def _stub_transport(collector, error: Exception, monkeypatch) -> None:
+    monkeypatch.setattr(
+        mod,
+        "_oauth",
+        lambda: {
+            "accessToken": "sk-ant-oat01-x",
+            "subscriptionType": "max",
+            "rateLimitTier": "default_claude_max_5x",
+        },
+    )
+
+    def boom(*_a, **_kw):
+        raise error
+
+    monkeypatch.setattr(mod.urllib.request, "urlopen", boom)
+
+
+def test_429_becomes_a_throttled_carrying_the_servers_hint(monkeypatch):
+    """The log's failure mode: 429 every minute. It must pace the next try."""
+    collector = mod.LimitsCollector(SharedState())
+    _stub_transport(collector, _http_error(429, {"Retry-After": "300"}), monkeypatch)
+    with pytest.raises(Throttled) as excinfo:
+        collector.refresh()
+    assert excinfo.value.retry_after_s == 300.0
+    # Documented ambiguity: a 429 is also what an expired token returns.
+    assert "expired" in str(excinfo.value)
+
+
+def test_429_without_a_hint_still_throttles(monkeypatch):
+    collector = mod.LimitsCollector(SharedState())
+    _stub_transport(collector, _http_error(429), monkeypatch)
+    with pytest.raises(Throttled) as excinfo:
+        collector.refresh()
+    assert excinfo.value.retry_after_s is None
+
+
+def test_other_http_errors_are_not_disguised_as_throttling(monkeypatch):
+    collector = mod.LimitsCollector(SharedState())
+    _stub_transport(collector, _http_error(500), monkeypatch)
+    with pytest.raises(urllib.error.HTTPError):
+        collector.refresh()
