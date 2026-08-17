@@ -58,10 +58,6 @@ feature work, not operational failures:
    boundary.
 3. **`severity` not adopted** for warn/critical colours — only `normal` has ever
    been observed and it is absent from Claude Code's own schema.
-4. **Is the 5-hour window anchored or rolling?** Decides whether the pace tick
-   can appear on the session bar. Two samples of `five_hour.resets_at` a few
-   minutes apart while active would settle it; both attempts on 2026-08-17 hit
-   429 with a valid token.
 
 ## Done in the layout redesign (2026-08-17)
 
@@ -74,8 +70,13 @@ Branch `explore`, pushed to `fork`. Closes four items from the list above:
 - **Per-model weekly cap** (Fable), read from `limits[]` — the only place it
   appears when `seven_day_opus`/`seven_day_sonnet` are null.
 - **Plan tier** from the Keychain: `subscriptionType` + `rateLimitTier`.
-- **Pace tick** on the weekly bars: where even-pace usage would be. Omitted on
-  the session bar while its window's anchor is unconfirmed.
+- **Pace marker** on every bar: where even-pace usage would be. The 5-hour
+  window turned out to be anchored, not rolling (measured — see
+  usage-endpoint.md), so the session bar carries one too. Drawn in the more
+  legible treatment from upstream PR #1: a white mark standing proud of the
+  pill rather than an inset notch. Window length is carried on the gauge by the
+  collector, not hardcoded in the renderer as PR #1 does, so a scoped window
+  can state its own span and an unknown one renders bare.
 - **Activity stale indicator**, and a weekly reset that names the weekday.
 - **429 backoff** in `base.py`: exponential from cadence to a 15-minute cap,
   honouring `Retry-After`, reset on success — with one warning line per

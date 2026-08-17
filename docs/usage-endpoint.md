@@ -96,6 +96,21 @@ CLI** — treat it as unstable.
 - `*_dollars` are `null` on this Max subscription and appear **nowhere** in the
   Claude Code binary. Most likely populated only for spend-metered plans.
   Unconfirmed.
+- **The 5-hour window is anchored, not rolling** — measured 2026-08-17. Two
+  samples 12 minutes apart while actively working:
+
+  | | `utilization` | `resets_at` |
+  |---|---|---|
+  | 16:26 | 22.0 | `2026-08-18T00:19:59.96Z` |
+  | 16:38 | 31.0 | `2026-08-18T00:19:59.72Z` |
+
+  Nine points of usage moved the percentage and left the reset time where it
+  was, to the second (the sub-second drift is server-side jitter). So the
+  window is a fixed 5-hour span whose start is `resets_at - 5h`, and "fraction
+  of the window elapsed" is a real quantity — which is what makes a pace marker
+  on the session bar honest. The description of `five_hour` as "the rolling
+  session window" (§ top-level keys) describes *which* window it is, not that
+  its boundary slides.
 
 ### `limits[]` — the richer, forward-compatible view
 

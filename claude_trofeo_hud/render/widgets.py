@@ -10,7 +10,8 @@ Box = tuple[int, int, int, int]  # x0, y0, x1, y1
 
 BAR_TOP_OFFSET = 44  # a gauge row's bar sits this far below its label line
 BAR_H = 24
-_TICK_W = 3
+MARKER_W = 3
+MARKER_OVERHANG = 3  # how far the marker stands proud of the pill, each side
 
 
 def progress_bar(
@@ -19,13 +20,17 @@ def progress_bar(
     pct: float,
     color: str,
     track: str = theme.PANEL,
-    pace: float | None = None,
+    marker_pct: float | None = None,
 ) -> None:
     """A pill gauge, optionally marked with where even-pace usage would be.
 
-    `pace` is the percentage of the window already elapsed. Fill short of the
-    tick means you're under pace; past it means you'll exhaust the window
-    early. Omitted for windows whose elapsed fraction isn't knowable.
+    `marker_pct` is the percentage of the window already elapsed. Fill short
+    of the marker means you're under pace; past it means you'll exhaust the
+    window early. Omitted for windows whose elapsed fraction isn't knowable.
+
+    The marker stands proud of the pill top and bottom rather than sitting
+    inside it: at a desk's viewing distance an inset notch disappears, and
+    the overhang reads at a glance whether it crosses fill or bare track.
     """
     x0, y0, x1, y1 = box
     r = (y1 - y0) // 2
@@ -38,15 +43,14 @@ def progress_bar(
         fill_w = max(fill_w, 2 * r)
         d.ellipse((x0, y0, x0 + fill_w, y1), fill=color)
 
-    if pace is None:
+    if marker_pct is None:
         return
-    pace = max(0.0, min(100.0, pace))
-    tx = x0 + int((x1 - x0) * pace / 100)
-    tx = max(x0 + 1, min(tx, x1 - _TICK_W - 1))
-    # Dark notch where it cuts the fill, light mark where it sits on the track.
-    inside = tx + _TICK_W <= x0 + fill_w
+    marker_pct = max(0.0, min(100.0, marker_pct))
+    mx = x0 + int((x1 - x0) * marker_pct / 100)
+    mx = max(x0 + 1, min(mx, x1 - MARKER_W - 1))
     d.rectangle(
-        (tx, y0 + 3, tx + _TICK_W - 1, y1 - 3), fill=theme.BG if inside else theme.MUTED
+        (mx, y0 - MARKER_OVERHANG, mx + MARKER_W - 1, y1 + MARKER_OVERHANG),
+        fill=theme.FG,
     )
 
 

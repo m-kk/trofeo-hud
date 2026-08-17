@@ -110,7 +110,7 @@ def _gauge_row(
         (x, y + w.BAR_TOP_OFFSET, xr, y + w.BAR_TOP_OFFSET + w.BAR_H),
         g.used_pct,
         color,
-        pace=g.elapsed_pct(state.now),
+        marker_pct=g.elapsed_pct(state.now),
     )
 
 

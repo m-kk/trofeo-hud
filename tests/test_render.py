@@ -3,7 +3,7 @@ machines; we assert geometry and the few pixels that carry meaning."""
 
 from datetime import datetime, timedelta
 
-from PIL import Image, ImageDraw
+from PIL import Image, ImageColor, ImageDraw
 
 from claude_trofeo_hud import theme
 from claude_trofeo_hud.render import widgets as w
@@ -100,42 +100,63 @@ def test_every_row_has_its_bar_below_its_label():
         assert y0 + w.BAR_TOP_OFFSET < y1  # bar sits inside its own row
 
 
-# ── Pace tick ────────────────────────────────────────────────────────────
+# ── Pace marker ──────────────────────────────────────────────────────────
+
+_BAR = (2, 3, 202, 27)  # x0, y0, x1, y1 — midpoint at x=102
 
 
-def _bar(pct: float, pace: float | None) -> Image.Image:
-    img = Image.new("RGB", (204, 30), theme.BG)
-    w.progress_bar(ImageDraw.Draw(img), (2, 3, 202, 27), pct, theme.ACCENT, pace=pace)
+def _bar(pct: float, marker_pct: float | None) -> Image.Image:
+    img = Image.new("RGB", (204, 40), theme.BG)
+    w.progress_bar(ImageDraw.Draw(img), _BAR, pct, theme.ACCENT, marker_pct=marker_pct)
     return img
 
 
 def _xs_of(img: Image.Image, color: str, y: int) -> list[int]:
     """x of every pixel of `color` on row `y`, scanning inside the bar only."""
-    rgb = tuple(int(color[i : i + 2], 16) for i in (1, 3, 5))
-    return [x for x in range(3, 202) if img.getpixel((x, y)) == rgb]
+    return [
+        x for x in range(3, 202) if img.getpixel((x, y)) == ImageColor.getrgb(color)
+    ]
 
 
-def test_pace_tick_lands_at_the_elapsed_fraction():
-    xs = _xs_of(_bar(10.0, 50.0), theme.MUTED, 15)
-    assert xs, "no tick drawn on the track"
-    assert abs(sum(xs) / len(xs) - 102) <= 2  # midpoint of a 2..202 bar
-
-
-def test_pace_tick_reads_as_a_notch_when_inside_the_fill():
-    xs = _xs_of(_bar(90.0, 50.0), theme.BG, 15)
-    assert xs, "no notch cut into the fill"
+def test_marker_lands_at_the_elapsed_fraction():
+    xs = _xs_of(_bar(10.0, 50.0), theme.FG, 15)
+    assert xs, "no marker drawn"
     assert abs(sum(xs) / len(xs) - 102) <= 2
 
 
-def test_pace_tick_omitted_when_pace_is_unknown():
+def test_marker_reads_the_same_where_it_crosses_the_fill():
+    """One treatment on fill or bare track — legibility beats subtlety here."""
+    on_track = _xs_of(_bar(10.0, 50.0), theme.FG, 15)
+    through_fill = _xs_of(_bar(90.0, 50.0), theme.FG, 15)
+    assert on_track and through_fill == on_track
+
+
+def test_marker_stands_proud_of_the_pill_top_and_bottom():
+    img = _bar(50.0, 50.0)
+    above = _BAR[1] - w.MARKER_OVERHANG
+    below = _BAR[3] + w.MARKER_OVERHANG
+    assert _xs_of(img, theme.FG, above), "no overhang above the pill"
+    assert _xs_of(img, theme.FG, below), "no overhang below the pill"
+    # …and nothing beyond it, so rows can't collide.
+    assert _xs_of(img, theme.FG, above - 1) == []
+
+
+def test_marker_omitted_when_the_window_length_is_unknown():
     assert _bar(10.0, None) != _bar(10.0, 50.0)
-    assert _xs_of(_bar(10.0, None), theme.MUTED, 15) == []
+    assert _xs_of(_bar(10.0, None), theme.FG, 15) == []
 
 
-def test_pace_tick_stays_inside_the_track_at_the_extremes():
-    for pace in (0.0, 100.0):
-        xs = _xs_of(_bar(0.0, pace), theme.MUTED, 15)
-        assert xs and all(2 <= x <= 202 for x in xs)
+def test_marker_stays_inside_the_track_at_the_extremes():
+    for marker_pct in (0.0, 100.0):
+        xs = _xs_of(_bar(0.0, marker_pct), theme.FG, 15)
+        assert xs and all(_BAR[0] <= x <= _BAR[2] for x in xs)
+
+
+def test_every_gauge_row_gets_a_marker():
+    """All three windows are anchored spans, so none renders bare."""
+    limits = mock_state(NOW).limits
+    for _, gauge in gauge_rows(limits):
+        assert gauge.elapsed_pct(NOW) is not None, gauge.label
 
 
 # ── Formatters ───────────────────────────────────────────────────────────

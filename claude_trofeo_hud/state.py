@@ -19,9 +19,9 @@ class LimitGauge:
     used_pct: float  # 0..100
     resets_at: datetime | None = None
     # Full length of the window, when it is a fixed span anchored to its
-    # reset. Set for the 7-day windows; None for the rolling 5-hour session
-    # window, where "fraction elapsed" isn't a meaningful quantity. Drives
-    # the pace tick, which is omitted when this is None.
+    # reset — verified true for both the 5-hour and 7-day windows. Left None
+    # for any window whose reset moves with use, where "fraction elapsed"
+    # isn't a meaningful quantity; the pace marker is then omitted.
     window_s: float | None = None
 
     def elapsed_pct(self, now: datetime) -> float | None:
@@ -81,7 +81,10 @@ def mock_state(now: datetime | None = None) -> HudState:
         now=now,
         limits=Limits(
             session=LimitGauge(
-                "Current session", 41.0, now + timedelta(hours=4, minutes=29)
+                "Current session",
+                41.0,
+                now + timedelta(hours=4, minutes=29),
+                window_s=5 * 3600,
             ),
             weekly=LimitGauge(
                 "All models",

@@ -18,14 +18,18 @@ directly beneath it. Bar colour tracks the percentage only (amber past 80%,
 red past 95%); it never encodes which model a window belongs to. The plan tier
 sits next to the `USAGE` heading.
 
-The thin vertical mark on a weekly bar is the **pace tick**: how far through
-the window you already are. Fill short of the tick means you're using the
-window slower than the clock is spending it; fill past it means you'll run out
-before the reset. It appears only on the 7-day bars, whose length is a fixed
-span — the 5-hour session window is documented as rolling, so "fraction
-elapsed" isn't a meaningful quantity there. The 7-day anchor is assumed to be
-a full fixed span; if an account's *first* weekly window is short, the tick is
-optimistic for that window only.
+The white vertical mark standing proud of each bar is the **pace marker**: how
+far through the window you already are. Fill short of the marker means you're
+using the window slower than the clock is spending it; fill past it means
+you'll run out before the reset.
+
+It needs the window's full length, which is only meaningful if the reset is
+anchored rather than sliding with use. Both are: sampled 12 minutes apart while
+working, session utilization moved 22% → 31% while `resets_at` held at the same
+second. A gauge whose window length is unknown renders without a marker rather
+than guessing. One caveat on the 7-day bars: the span is assumed full, so if an
+account's *first* weekly window is short, the marker is optimistic for that
+window only.
 
 The per-model weekly cap (`Fable only`) is absent on most accounts; when the
 API doesn't report it, the row is dropped and the column closes up rather than

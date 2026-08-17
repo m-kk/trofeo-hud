@@ -28,10 +28,11 @@ _BETA_HEADER = "oauth-2025-04-20"
 _TIMEOUT_S = 15
 
 _WEEK_WINDOW_S = 7 * 86400
-# five_hour is documented as a *rolling* window: resets_at moves with use, so
-# "fraction of the window elapsed" — and any pace tick built on it — would be
-# meaningless. Left unset until the anchor is confirmed against live data.
-_SESSION_WINDOW_S = None
+# Measured 2026-08-17: five_hour is *anchored*, not rolling. Two samples 12
+# minutes apart while actively working moved utilization 22.0 -> 31.0 while
+# resets_at stayed at 2026-08-18T00:19:59Z. A window whose reset doesn't move
+# with use has a meaningful elapsed fraction, so the marker is honest here.
+_SESSION_WINDOW_S = 5 * 3600
 _FABLE = "Fable"
 
 

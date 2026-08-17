@@ -107,9 +107,9 @@ def test_null_utilization_reads_as_zero():
     assert lim.session.resets_at is None
 
 
-def test_session_window_carries_no_pace_length():
-    """five_hour is documented as *rolling*; a pace tick there would lie."""
-    assert parse_usage(_SAMPLE).session.window_s is None
+def test_session_window_carries_its_span():
+    """Measured anchored, not rolling — usage moved while resets_at held."""
+    assert parse_usage(_SAMPLE).session.window_s == 5 * 3600
 
 
 def test_plan_label_combines_subscription_and_tier():
