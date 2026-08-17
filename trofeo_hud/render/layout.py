@@ -71,7 +71,19 @@ def _limits_zone(d: ImageDraw.ImageDraw, state: HudState, x0: int, x1: int) -> N
     d.text((x, 22), "USAGE", font=theme.sans(36), fill=theme.FG)
     if lim.plan:
         d.text((x + 148, 34), lim.plan, font=theme.sans(22), fill=theme.MUTED)
-    if lim.stale:
+    # Auth expiry outranks staleness: the reading isn't late, it's unobtainable
+    # until the user runs Claude Code again. Say so instead of quietly holding
+    # a frozen percentage behind a small "stale".
+    if lim.auth_expired:
+        d.text((xr, 26), "AUTH EXPIRED", font=theme.sans(20), fill=theme.CRIT, anchor="ra")
+        d.text(
+            (xr, 50),
+            "run Claude Code to refresh",
+            font=theme.sans(15),
+            fill=theme.FAINT,
+            anchor="ra",
+        )
+    elif lim.stale:
         d.text((xr, 34), "stale", font=theme.sans(20), fill=theme.STALE, anchor="ra")
 
     rows = gauge_rows(lim)
@@ -100,15 +112,18 @@ def _limits_zone(d: ImageDraw.ImageDraw, state: HudState, x0: int, x1: int) -> N
 def _gauge_row(
     d: ImageDraw.ImageDraw, state: HudState, g: LimitGauge, y: int, x: int, xr: int
 ) -> None:
-    color = theme.limit_color(g.used_pct)  # severity, never model identity
     d.text((x, y + 8), g.label, font=theme.sans(24), fill=theme.FG)
-    d.text(
-        (xr, y - 6), f"{g.used_pct:.0f}%", font=theme.sans(42), fill=color, anchor="ra"
-    )
+    if g.used_pct is None:
+        # Server reported null: unknown, which is not the same as 0%.
+        pct, value, color = 0.0, "—%", theme.FAINT
+    else:
+        pct, value = g.used_pct, f"{g.used_pct:.0f}%"
+        color = theme.limit_color(pct)  # severity, never model identity
+    d.text((xr, y - 6), value, font=theme.sans(42), fill=color, anchor="ra")
     w.progress_bar(
         d,
         (x, y + w.BAR_TOP_OFFSET, xr, y + w.BAR_TOP_OFFSET + w.BAR_H),
-        g.used_pct,
+        pct,
         color,
         marker_pct=g.elapsed_pct(state.now),
     )

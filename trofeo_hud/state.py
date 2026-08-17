@@ -16,7 +16,7 @@ class LimitGauge:
     """One rate-limit window (session or weekly)."""
 
     label: str
-    used_pct: float  # 0..100
+    used_pct: float | None  # 0..100, or None when the server says null
     resets_at: datetime | None = None
     # Full length of the window, when it is a fixed span anchored to its
     # reset — verified true for both the 5-hour and 7-day windows. Left None
@@ -39,6 +39,10 @@ class Limits:
     weekly_fable: LimitGauge | None = None  # per-model cap; often absent
     plan: str | None = None  # e.g. "Max (5x)"
     stale: bool = False
+    # The OAuth token expired and only Claude Code can refresh it. Distinct
+    # from `stale`: the numbers aren't late, they're unreachable until the user
+    # runs Claude Code again.
+    auth_expired: bool = False
 
 
 @dataclass

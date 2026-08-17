@@ -160,6 +160,52 @@ def test_every_gauge_row_gets_a_marker():
 
 
 # ── Formatters ───────────────────────────────────────────────────────────
+# ── Auth expiry and unknown utilization ──────────────────────────────────
+
+
+def test_render_auth_expired_differs_from_stale():
+    """An expired token must be visually distinct from merely-late data — that
+    distinction is the whole point of the flag."""
+    expired = mock_state(NOW)
+    expired.limits.auth_expired = True
+    stale = mock_state(NOW)
+    stale.limits.stale = True
+
+    assert render(expired).tobytes() != render(stale).tobytes()
+
+
+def test_render_unknown_utilization_does_not_crash():
+    """`used_pct is None` means the server reported null; it must not be
+    formatted as a number."""
+    state = mock_state(NOW)
+    state.limits.session.used_pct = None
+
+    img = render(state)
+
+    assert img.size == (WIDTH, HEIGHT)
+
+
+def test_render_unknown_utilization_differs_from_zero():
+    unknown = mock_state(NOW)
+    unknown.limits.session.used_pct = None
+    zero = mock_state(NOW)
+    zero.limits.session.used_pct = 0.0
+
+    assert render(unknown).tobytes() != render(zero).tobytes()
+
+
+def test_render_auth_expired_says_so_in_the_limits_header():
+    expired = mock_state(NOW)
+    expired.limits.auth_expired = True
+    plain = render(mock_state(NOW))
+    img = render(expired)
+    # CRIT is not used anywhere else on the mock frame's header band.
+    crit = ImageColor.getrgb(theme.CRIT)
+    band = [(x, y) for y in range(20, 80) for x in range(0, 620)]
+    assert any(img.getpixel(p) == crit for p in band)
+    assert not any(plain.getpixel(p) == crit for p in band)
+
+
 
 
 def test_fmt_tokens():
