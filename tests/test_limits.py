@@ -198,3 +198,9 @@ def test_other_http_errors_are_not_disguised_as_throttling(monkeypatch):
     _stub_transport(collector, _http_error(500), monkeypatch)
     with pytest.raises(urllib.error.HTTPError):
         collector.refresh()
+
+
+def test_cadence_stays_clear_of_the_endpoints_rate_limit():
+    """Measured allowance is ~1 request/2 min; 60s guarantees 429s (see
+    docs/usage-endpoint.md). Poll slower than the limiter, don't absorb it."""
+    assert mod.LimitsCollector.cadence_s >= 180.0

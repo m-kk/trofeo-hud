@@ -150,7 +150,11 @@ def _local_naive(iso: str | None) -> datetime | None:
 
 class LimitsCollector(Collector):
     name_ = "limits"
-    cadence_s = 60.0
+    # The endpoint admits roughly one call per two minutes (measured: at a 60s
+    # cadence, every other poll 429s — docs/usage-endpoint.md). Utilization
+    # moves slowly and the countdowns tick client-side off resets_at, so a
+    # five-minute cadence costs the panel nothing and stays clear of the limit.
+    cadence_s = 300.0
 
     def refresh(self) -> None:
         oauth = _oauth()

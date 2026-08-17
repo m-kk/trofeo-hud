@@ -234,6 +234,36 @@ Since `expiresAt` is available locally, the collector can and should make that
 distinction *before* the request: if the token is past `expiresAt`, render a
 distinct "AUTH EXPIRED" state rather than a stale percentage.
 
+### How often you may actually call it — measured
+
+**Roughly one request per two minutes.** A 60 s polling cadence gets a 429 on
+about half of all polls.
+
+Measured 2026-08-17 against 145 failures across a 5-hour daemon run
+(`~/Library/Logs/claude-trofeo-hud/hud.log`, collector cadence fixed at 60 s).
+Gaps between consecutive failures:
+
+| Gap | Count |
+|---|---|
+| 120–121 s | 103 |
+| 60–61 s | 34 |
+| other | 8 |
+
+A 120 s modal gap at a 60 s cadence means every *other* poll succeeded — the
+limiter admits one call, refuses the next. Confirmed interactively: a request
+returned 200, and the same request two seconds later returned 429.
+
+The 429 carries no rate-limit metadata — no `anthropic-ratelimit-*` headers,
+and `Retry-After: 0`, which is not a usable hint. Body is the generic
+`{"type": "rate_limit_error", "message": "Rate limited. Please try again
+later."}`.
+
+Consequence: **poll no faster than the limit**, rather than absorbing the 429s.
+Utilization moves slowly and reset countdowns tick client-side from
+`resets_at`, so a several-minute cadence costs the panel nothing. This applies
+to upstream `main` too — its 60 s cadence is where the observed failures came
+from.
+
 ---
 
 ## Alternative source: the `get_usage` control request

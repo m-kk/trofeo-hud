@@ -80,6 +80,10 @@ Branch `explore`, pushed to `fork`. Closes four items from the list above:
 - **429 backoff** in `base.py`: exponential from cadence to a 15-minute cap,
   honouring `Retry-After`, reset on success — with one warning line per
   failure instead of a traceback a minute.
+- **Limits cadence 60s → 300s.** The endpoint admits ~1 call/2 min, so the
+  inherited 60s cadence 429s on every other poll. Measured from 145 failures
+  over a 5-hour run; see usage-endpoint.md. **Affects upstream `main`
+  identically** — worth a fifth PR.
 
 ## Local repo state
 
