@@ -7,9 +7,27 @@ LCD (1280×480, USB-C, ~$38), driven from macOS. Inspired by the r/ClaudeAI
 ![Live HUD render — session/weekly limit gauges, today's tokens and cost, current session activity, hourly burn sparkline](docs/hud.png)
 
 What it shows: Pro/Max session + weekly limit bars with reset countdowns
-(from Anthropic's usage endpoint), today's tokens and hypothetical API cost
+(from Anthropic's usage endpoint), today's tokens and estimated API cost
 (via [ccusage](https://github.com/ryoppippi/ccusage)), the live session
 (project, model, burn rate), a clock, and an hourly token sparkline.
+
+### Reading the limit gauges
+
+Each window is one row — label and percentage on a line, that row's bar
+directly beneath it. Bar colour tracks the percentage only (amber past 80%,
+red past 95%); it never encodes which model a window belongs to. The plan tier
+sits next to the `USAGE` heading.
+
+The thin vertical mark on a weekly bar is the **pace tick**: how far through
+the window you already are. Fill short of the tick means you're using the
+window slower than the clock is spending it; fill past it means you'll run out
+before the reset. It appears only on the 7-day bars, whose length is a fixed
+span — the 5-hour session window is documented as rolling, so "fraction
+elapsed" isn't a meaningful quantity there.
+
+The per-model weekly cap (`Fable only`) is absent on most accounts; when the
+API doesn't report it, the row is dropped and the column closes up rather than
+showing an empty bar.
 
 ## Requirements
 
