@@ -195,11 +195,46 @@ width `2 * r`. At the 22 px bar height in `layout.py:55`, anything under ~5%
 renders as a ~5% blob. A fresh session at 1% looks like 5%. Either draw a
 clipped partial circle or accept a 1 px sliver below the rounding threshold.
 
+**The weekly gauge's reset timestamp is a bare time-of-day for a date two days
+out.** `layout.py:59` formats both gauges identically:
+`f"resets {g.resets_at:%-I:%M %p}"`. So the WEEK row renders
+`resets 7:00 AM · 2d 9h` — the countdown carries the real information while the
+timestamp actively misleads about *which* 7:00 AM. Claude Code draws this
+distinction deliberately: its `/usage` bar table carries a per-bar
+`alwaysShowDateInReset` flag, `false` for `five_hour` and `true` for
+`seven_day`. Include the date (and, if adopting the per-model caps, for those
+too) whenever the window is longer than a day.
+
+**`activity.py:128` can `IndexError` at every hour boundary.**
+
+```python
+now = datetime.now().astimezone()   # captured at the top of refresh()
+...                                 # _ingest() then reads freshly appended lines
+buckets = [0] * (now.hour + 1)
+for e in self._events:
+    buckets[e.ts.hour] += e.tokens
+```
+
+`now` is sampled before `_ingest`, which then parses lines that may have been
+written *after* that sample. A tick starting at 10:59:59.9 that ingests an event
+stamped 11:00:00.x indexes `buckets[11]` into a list of length 11. `Collector.run`
+catches it, logs a traceback, and marks activity stale; the next 5 s tick
+recovers. The symptom is therefore an unexplained stale flicker on the activity
+zone plus periodic tracebacks in `hud.log` at hour boundaries — annoying to
+diagnose, trivial to fix: size the list to 24 (the docstring in `state.py:57`
+already says 24 slots) or clamp the index.
+
 **`utilization: null` renders as a confident "0%".** `limits.py:62`,
 `float(section.get("utilization") or 0.0)`. Claude Code's schema declares this
 field nullable, and the gauge already has a `—` placeholder for a missing
 section (`layout.py:49`). Map null → `None` so unknown reads as unknown. Note
 `or` also swallows a legitimate `0.0`, which is harmless only by coincidence.
+
+**The tokens collector's timeout exceeds its own cadence.** `tokens.py:21` sets
+`_TIMEOUT_S = 120` against a 60 s `cadence_s`, and `Collector.run` only starts
+`_stop.wait(60)` *after* `refresh()` returns. A slow ccusage run therefore
+stretches the effective cadence past three minutes. Not a bug, but it means the
+"60 s cadence" in the docstring is a floor, not a period.
 
 **No backoff or 429 handling on the usage endpoint.** A 429 marks the section
 stale and retries in exactly 60 s, forever. The endpoint exposes no
@@ -271,7 +306,8 @@ neither contains secrets.
 5. Refuse cross-host redirects on the usage request (§1.5).
 6. Merge `limits[]` for the per-model weekly cap (see
    [usage-endpoint.md](usage-endpoint.md)) — the one materially missing gauge.
-7. Reconcile the week-window mismatch (§2), thread `jpeg_quality` (§3), add the
-   activity stale indicator (§3).
+7. Reconcile the week-window mismatch (§2); thread `jpeg_quality`, add the
+   activity stale indicator, size the hourly buckets to 24, and show the date on
+   the weekly reset (§3).
 8. Backfill collector and config tests, starting with the ones that pin §1.1
    and §1.2.

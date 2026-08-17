@@ -58,7 +58,7 @@ CLI** — treat it as unstable.
 | `seven_day` | LimitWindow | `33.0` | ✅ | `/usage`: "Current week (all models)". |
 | `seven_day_opus` | LimitWindow | `null` | ✅ | Per-model weekly cap. Null here. |
 | `seven_day_sonnet` | LimitWindow | `null` | ✅ | `/usage`: "Current week (Sonnet only)", rendered only when plan ∈ {`max`, `team`, `null`}. Null here. |
-| `seven_day_oauth_apps` | LimitWindow | `null` | ✅ | Separate window for OAuth-app (non-Claude-Code) traffic. |
+| `seven_day_oauth_apps` | LimitWindow | `null` | ✅ | Null here. Name *suggests* a separate window for OAuth-app (non-Claude-Code) traffic — **inferred from the key name, not observed.** |
 | `cinder_cove` | LimitWindow | `null` | ✅ | Codename bucket that *is* in the allowlist — so it is a real, currently-unused window, not noise. |
 | `extra_usage` | object | see below | ✅ | Usage-credit ("extra usage") state. |
 | `limits` | array | 3 entries | ✅ | **The forward-compatible view.** See below. |
@@ -116,7 +116,7 @@ CLI** — treat it as unstable.
 | `kind` | Observed: `session`, `weekly_all`, `weekly_scoped`. Full enum unconfirmed. **Not** the same namespace as the `five_hour`/`seven_day_opus`/… strings, which belong to the rate-limit *header* vocabulary. |
 | `group` | Observed: `session`, `weekly`. A coarser grouping for stacking bars. |
 | `percent` | **Integer** here (41, 33, 10), where top-level `utilization` is a float (41.0). |
-| `severity` | Observed only `normal`. The binary contains `severity: "warning"` literals, so at least one escalation level exists, but that string was not clearly in this payload's namespace — **enum unconfirmed**. If confirmed, it replaces our hardcoded 80%/95% thresholds with server-authoritative state. |
+| `severity` | Observed only `normal`. **Enum unconfirmed, and the CLI is no help:** `severity` is not in Claude Code's zod schema at all — it arrives via `.passthrough()` and is never validated. A bounded scan of the binary found no enum literal for it; the `severity: "warning"` strings present belong to unrelated UI namespaces, and the `severity ?? "normal"` patterns are defaults elsewhere. So an escalation vocabulary probably exists but is unverified here. Only build warn/critical colors on it after observing a non-`normal` value in the wild. |
 | `scope` | `null`, or `{model: {id, display_name}, surface}`. `display_name` is a server-supplied label ("Fable"); `id` was `null`. |
 | `is_active` | `true` on session, `false` on both weekly entries. Plausibly "is this the currently binding window" — **semantics unconfirmed**, do not build on it. |
 
@@ -288,8 +288,9 @@ worth adopting for two gauges.
 1. **Per-model weekly cap** (`limits[]` `weekly_scoped`, 10% Fable here) — on
    Max, the per-model weekly window is often the *binding* constraint, and it
    is the one number the panel cannot currently show at all.
-2. **`severity`** — server-authoritative warn/critical state, replacing our
-   guessed 80%/95% thresholds.
+2. **`severity`** — potentially server-authoritative warn/critical state,
+   replacing our guessed 80%/95% thresholds. *Contingent on confirming the
+   enum* — only `normal` has been observed, and the CLI does not validate it.
 3. **`subscriptionType`** (Keychain, free) — plan label on the panel.
 4. **`expiresAt`** (Keychain, free) — turns silent staleness into an actionable
    "AUTH EXPIRED".
