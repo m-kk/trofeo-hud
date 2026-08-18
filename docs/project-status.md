@@ -28,9 +28,8 @@ scaffold is gone.
 
 No GitHub issues on `m-kk/trofeo-hud`. What is actually open:
 
-- **Field-test USB reconnect** (TASKS.md Phase 4) — done 15:35 today, and it
-  **failed**: see "Unplug field test" below. Fixed; a second replug is the
-  remaining confirmation.
+- ~~Field-test USB reconnect~~ — done today: first attempt failed, fixed,
+  second attempt passed. See "Unplug field test" below. **Closed.**
 - **Live soak of the #6 limits collector.** The daemon was restarted at 15:16
   today onto current `main` (it had been running pre-fix code since 14:58);
   the collector has run against the live endpoint only since then. Check
@@ -51,7 +50,7 @@ at `~/Downloads/display/claude-trofeo-hud`, so every console script's shebang
 rewrote them; 129 tests pass, ruff clean. The launchd agent itself was
 unaffected (it invokes `.venv/bin/python3 -m trofeo_hud`).
 
-## Unplug field test — failed, fixed (2026-08-18)
+## Unplug field test — failed, fixed, passed (2026-08-18)
 
 Unplugged at 15:35:29. Every `send()` from then on returned `False`
 ("HidLcd: short chunk write at offset 0"), ~2/s; replugging changed nothing —
@@ -73,10 +72,10 @@ handle and nothing is on the glass either way. A single decline with the
 device present still does not reconnect (#3 stands; #228 wedge). Enumeration
 only runs on declines. `close()` swallows a failing driver disconnect.
 
-**Re-test needed:** unplug, wait ≥5 s, replug; expect `panel declined N
-frame(s) and the device is no longer attached — reconnecting`, then connect
-retries with backoff, then `panel connected`. Reconnect may take up to 60 s
-after the replug (backoff cap).
+**Re-test (15:49) passed:** `panel declined 2 frame(s) and the device is no
+longer attached — reconnecting` at 15:49:14, connect retries at 1/2/4/8/16 s,
+`panel connected` at 15:49:54 — 40 s after the unplug, of which most is
+backoff waiting for the replug. Recovery is now field-proven.
 
 ## Native transcripts + session fallback (2026-08-18)
 
@@ -207,10 +206,9 @@ Branch `explore`, pushed to `fork`. Closes four items from the list above:
 
 ## Verification gaps
 
-- **Unplug/replug**: field-tested once (failed, fixed — see above); the fix
-  itself is unit-tested against a fake panel and awaits a second replug.
-  Genuine soft failures (#228-style, device present) still cannot be induced
-  on demand.
+- **Unplug/replug** is field-proven (see above). Genuine soft failures
+  (#228-style, device present) still cannot be induced on demand; that path
+  remains unit-tested only.
 - **#6's collector has run live only since 15:16 today** — before that the
   account was rate-limited and the daemon was on pre-fix code. Unit-tested
   with faked HTTP; live behaviour beyond a clean startup is not yet observed.
