@@ -53,20 +53,29 @@ Four independent PRs, all test-first, all reporting `MERGEABLE`:
 Test count went from 5 (renderer only) to 21 on the branch with the widest
 coverage. Collectors, config, and the main loop had **zero** tests before this.
 
-## Open, not addressed
+## Review follow-ups — closed 2026-08-18
 
-Deliberately out of scope for the remediation PRs — these are correctness and
-feature work, not operational failures:
+The items the remediation PRs left open, all now resolved on `main`:
 
-1. **Week-window mismatch.** `tokens.py` sums a Monday-anchored calendar week;
-   the weekly gauge shows the server's rolling 7-day window. They are rendered
-   adjacently and disagree.
-2. **§3 output issues:** `jpeg_quality` is documented but hardcoded;
-   `progress_bar` overstates values under ~5.5% (the minimum fill is a full
-   pill cap); `activity.py`'s hourly bucket list can `IndexError` at an hour
-   boundary.
-3. **`severity` not adopted** for warn/critical colours — only `normal` has ever
-   been observed and it is absent from Claude Code's own schema.
+1. **Week-window mismatch** — `tokens.py` now sums the trailing seven
+   calendar days (`--since` today−6) and the panel labels it `7 DAYS`, so it
+   sits honestly beside the rolling 7-day gauge. Residual: ccusage buckets by
+   calendar day, so the two can still differ by the partial day at the
+   window's start.
+2. **`jpeg_quality`** is threaded from `Config` through `run_loop` to
+   `TrofeoPanel.send(quality=…)` instead of being hardcoded at 90.
+3. **`progress_bar` small fills** are drawn true to size — inside the left cap
+   the fill is the circle segment left of the fill edge (`ImageDraw.chord`),
+   not a whole cap. 1% no longer reads as ~4%.
+4. **`activity.py` hour-boundary `IndexError`** — the bucket list is sized to
+   the latest hour seen across `now` *and* the events, so an event stamped in
+   the hour that began mid-scan widens the list instead of falling off it.
+5. **`severity`** — closed as *won't adopt for now*: only `normal` has ever
+   been observed and it is absent from Claude Code's own schema
+   (usage-endpoint.md). Colour stays a function of percentage. Revisit only
+   after a non-`normal` value is seen in the wild.
+
+Tests: 75 (new `test_app`, `test_panel`, `test_tokens`, `test_activity`).
 
 ## Done in the layout redesign (2026-08-17)
 
@@ -97,14 +106,12 @@ Branch `explore`, pushed to `fork`. Closes four items from the list above:
 
 ## Local repo state
 
-- Working branch `explore` holds the three docs commits. Not pushed — no write
-  access upstream, and the docs carry account telemetry.
-- Four fix branches pushed to `fork`.
-- `uv.lock` was already modified before this work began; left untouched and kept
-  out of every commit.
-- ~~`src/claude_trofeo_hud/__init__.py` is dead `uv init` scaffolding upstream~~ removed in the rename
-  (the real package is at the repo root via `module-root = ""`). Not worth a PR
-  on its own; fold into the next one.
+- `main` on `origin` (m-kk/trofeo-hud) is the working branch; the local
+  checkout still calls it `explore` and tracks `origin/main`.
+- The five `fix/*` branches exist on `origin` and `fork` while the upstream
+  PRs are open.
+- `docs/usage-endpoint.md` carries account telemetry — never fold it into an
+  upstream PR.
 
 ## Verification gaps
 

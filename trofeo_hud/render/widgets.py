@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+
 from PIL import ImageDraw
 
 from .. import theme
@@ -40,8 +42,11 @@ def progress_bar(
     if fill_w > 2 * r:
         d.rounded_rectangle((x0, y0, x0 + fill_w, y1), radius=r, fill=color)
     elif fill_w > 0:
-        fill_w = max(fill_w, 2 * r)
-        d.ellipse((x0, y0, x0 + fill_w, y1), fill=color)
+        # Inside the left cap the fill is the segment of the cap's circle to
+        # the left of x0+fill_w — drawn true to size, not padded out to a
+        # whole cap (which read a 1% window as ~4%).
+        theta = math.degrees(math.acos((fill_w - r) / r))
+        d.chord((x0, y0, x0 + 2 * r, y1), theta, 360 - theta, fill=color)
 
     if marker_pct is None:
         return

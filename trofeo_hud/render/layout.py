@@ -168,7 +168,7 @@ def _tokens_zone(d: ImageDraw.ImageDraw, state: HudState, x0: int, x1: int) -> N
 
     d.text(
         (x, 348),
-        f"WEEK  {w.fmt_tokens(t.week_tokens)}",
+        f"7 DAYS  {w.fmt_tokens(t.week_tokens)}",
         font=theme.mono(21),
         fill=theme.MUTED,
     )

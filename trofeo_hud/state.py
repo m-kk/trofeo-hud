@@ -49,7 +49,7 @@ class TokenStats:
     output_tokens: int = 0
     cache_tokens: int = 0
     session_count: int = 0
-    week_tokens: int = 0
+    week_tokens: int = 0  # trailing 7 calendar days, incl. today
     week_cost_usd: float = 0.0
     stale: bool = False
 

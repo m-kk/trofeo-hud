@@ -49,11 +49,11 @@ class TrofeoPanel:
                  result.pm_byte)
         return result.resolution
 
-    def send(self, img: Image.Image) -> bool:
+    def send(self, img: Image.Image, quality: int = 90) -> bool:
         if self._dev is None:
             raise RuntimeError("panel not connected")
         buf = io.BytesIO()
-        img.convert("RGB").save(buf, "JPEG", quality=90)
+        img.convert("RGB").save(buf, "JPEG", quality=quality)
         return bool(self._dev.send(buf.getvalue()))
 
     def close(self) -> None:

@@ -26,7 +26,9 @@ class TokensCollector(Collector):
     cadence_s = 60.0
 
     def refresh(self) -> None:
-        week_start = date.today() - timedelta(days=date.today().weekday())
+        # Trailing seven calendar days, so the figure sits honestly beside
+        # the rolling 7-day gauge (a Monday-anchored week disagreed with it).
+        week_start = date.today() - timedelta(days=6)
         cmd = _CMD + [week_start.strftime("%Y%m%d")]
         out = subprocess.run(cmd, capture_output=True, text=True,
                              timeout=_TIMEOUT_S, check=True).stdout

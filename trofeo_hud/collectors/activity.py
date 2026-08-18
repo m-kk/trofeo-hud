@@ -125,7 +125,10 @@ class ActivityCollector(Collector):
             burned = sum(e.tokens for e in self._events if e.ts >= burn_start)
             act.burn_rate_tpm = burned / BURN_WINDOW_MIN
 
-        buckets = [0] * (now.hour + 1)
+        # `now` was sampled before the scan; an event stamped in the hour that
+        # began during it must widen the list rather than fall off its end.
+        hours = max([now.hour] + [e.ts.hour for e in self._events]) + 1
+        buckets = [0] * hours
         for e in self._events:
             buckets[e.ts.hour] += e.tokens
 

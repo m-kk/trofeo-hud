@@ -201,3 +201,25 @@ def test_same_percentage_renders_the_same_colour_on_every_gauge():
     session = LimitGauge("Current session", 85.0)
     fable = LimitGauge("Fable only", 85.0)
     assert theme.limit_color(session.used_pct) == theme.limit_color(fable.used_pct)
+
+
+# ── Small fills are drawn true to size, not inflated to a full cap ───────
+
+
+def _fill_extent(pct: float) -> int:
+    xs = _xs_of(_bar(pct, None), theme.ACCENT, 15)
+    return max(xs) if xs else _BAR[0]
+
+
+def test_small_fill_is_not_inflated_to_a_full_pill_cap():
+    """2% of a 200px track is 4px; it used to draw a 24px cap regardless."""
+    assert _BAR[0] < _fill_extent(2.0) <= _BAR[0] + 5
+
+
+def test_fill_extent_grows_with_the_percentage_through_the_cap_region():
+    extents = [_fill_extent(p) for p in (1.0, 2.0, 4.0, 8.0, 12.0, 20.0)]
+    assert extents == sorted(extents) and len(set(extents)) == len(extents)
+
+
+def test_zero_fill_draws_nothing():
+    assert _xs_of(_bar(0.0, None), theme.ACCENT, 15) == []

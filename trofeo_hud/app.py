@@ -42,7 +42,7 @@ def run_loop(shared, cfg: Config, stop_after_s: float = 0) -> None:
             frame_start = time.time()
             img = _frame(shared, cfg)
             try:
-                ok = panel.send(img)
+                ok = panel.send(img, quality=cfg.jpeg_quality)
             except Exception as e:
                 log.warning("panel send failed (%s) — reconnecting", e)
                 panel.close()
