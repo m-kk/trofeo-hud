@@ -36,22 +36,29 @@ break in use".
 | [usage-endpoint.md](usage-endpoint.md) | Field reference for `GET /api/oauth/usage`, verified live and cross-checked against Claude Code 2.1.233's own schemas. Contains this account's live utilisation figures and plan tier — **kept out of every upstream PR for that reason.** |
 | [plans/archive/review-remediation.md](plans/archive/review-remediation.md) | The remediation plan, with outcomes and PR links. |
 
-### Submitted upstream
+### Submitted upstream — and now on our `main` (2026-08-18)
 
-Four independent PRs, all test-first, all reporting `MERGEABLE`:
+Four independent PRs, all test-first, all reporting `MERGEABLE`. Upstream has
+not merged them; each is now cherry-picked onto `m-kk/trofeo-hud` `main`
+(#6 was ported by hand onto the rebuilt gauge-row layout):
 
 - [#3](https://github.com/christensen143/claude-trofeo-hud/pull/3) — don't
   reconnect when the panel declines a frame (risked wedging the panel until a
-  physical replug)
+  physical replug); every loop path now paces
 - [#4](https://github.com/christensen143/claude-trofeo-hud/pull/4) — config
-  falls back to defaults instead of crash-looping the launchd agent
+  falls back to defaults instead of crash-looping the launchd agent; native
+  TOML time literals accepted; fps/quality/dim clamped; `preview` mkdirs
 - [#5](https://github.com/christensen143/claude-trofeo-hud/pull/5) — pin
-  ccusage instead of executing `@latest` every 60 s
-- [#6](https://github.com/christensen143/claude-trofeo-hud/pull/6) — surface
-  auth expiry; never forward the OAuth token off-host
+  ccusage (`20.0.20`) instead of executing `@latest` every 60 s
+- [#6](https://github.com/christensen143/claude-trofeo-hud/pull/6) — `AUTH
+  EXPIRED` state from the Keychain `expiresAt` (no request made, no token
+  refresh attempted); urllib opener refuses cross-host redirects so the bearer
+  token can't be forwarded; null utilization renders `—%`, not `0%`
 
-Test count went from 5 (renderer only) to 21 on the branch with the widest
-coverage. Collectors, config, and the main loop had **zero** tests before this.
+[#7](https://github.com/christensen143/claude-trofeo-hud/pull/7) (5-minute
+poll cadence) was already on `main` as its own commit.
+
+Tests: 129.
 
 ## Review follow-ups — closed 2026-08-18
 
@@ -75,7 +82,7 @@ The items the remediation PRs left open, all now resolved on `main`:
    (usage-endpoint.md). Colour stays a function of percentage. Revisit only
    after a non-`normal` value is seen in the wild.
 
-Tests: 75 (new `test_app`, `test_panel`, `test_tokens`, `test_activity`).
+Tests after this pass: 75 (new `test_app`, `test_panel`, `test_tokens`, `test_activity`).
 
 ## Done in the layout redesign (2026-08-17)
 
