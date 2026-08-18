@@ -1,4 +1,4 @@
-"""CLI: python -m claude_trofeo_hud {run|preview|panel|install-agent|uninstall-agent}
+"""CLI: python -m trofeo_hud {run|preview|panel|install-agent|uninstall-agent}
 
 run              — the real HUD: live collectors → LCD, reconnect-resilient
 preview          — render one frame (mock, or --live) to a PNG, no hardware
@@ -19,7 +19,7 @@ from .state import mock_state
 
 
 def main() -> int:
-    p = argparse.ArgumentParser(prog="claude-trofeo-hud")
+    p = argparse.ArgumentParser(prog="trofeo-hud")
     p.add_argument("-v", "--verbose", action="store_true")
     sub = p.add_subparsers(dest="cmd", required=True)
 

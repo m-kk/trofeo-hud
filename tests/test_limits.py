@@ -10,9 +10,9 @@ from email.utils import format_datetime
 
 import pytest
 
-from claude_trofeo_hud.collectors import limits as mod
-from claude_trofeo_hud.collectors.base import SharedState
-from claude_trofeo_hud.collectors.limits import (
+from trofeo_hud.collectors import limits as mod
+from trofeo_hud.collectors.base import SharedState
+from trofeo_hud.collectors.limits import (
     _WEEK_WINDOW_S,
     Throttled,
     parse_usage,

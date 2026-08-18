@@ -2,7 +2,7 @@
 
 from datetime import datetime, timedelta
 
-from claude_trofeo_hud.state import LimitGauge
+from trofeo_hud.state import LimitGauge
 
 _WEEK_S = 7 * 86400
 NOW = datetime(2026, 8, 17, 12, 0)

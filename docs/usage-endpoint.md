@@ -255,7 +255,7 @@ distinct "AUTH EXPIRED" state rather than a stale percentage.
 about half of all polls.
 
 Measured 2026-08-17 against 145 failures across a 5-hour daemon run
-(`~/Library/Logs/claude-trofeo-hud/hud.log`, collector cadence fixed at 60 s).
+(`~/Library/Logs/trofeo-hud/hud.log`, collector cadence fixed at 60 s).
 Gaps between consecutive failures:
 
 | Gap | Count |

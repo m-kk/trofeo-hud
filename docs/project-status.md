@@ -15,6 +15,13 @@ static layout → live collectors → launchd daemon).
 The old fork `m-kk/claude-trofeo-hud` (remote `fork`) is kept only while the
 upstream PRs below are open; delete it once they resolve.
 
+Renamed 2026-08-18: package `trofeo_hud`, CLI `trofeo-hud`, logs in
+`~/Library/Logs/trofeo-hud/`, config in `~/.config/trofeo-hud/` (the old
+`claude-trofeo-hud` config dir is still read as a fallback), launchd label
+`io.github.m-kk.trofeo-hud` (install/uninstall also retire the old
+`com.varlogchris.claude-trofeo-hud` agent). The dead `src/claude_trofeo_hud`
+scaffold is gone.
+
 ## Current work
 
 A review of the codebase plus an exploration of Anthropic's OAuth usage
@@ -95,7 +102,7 @@ Branch `explore`, pushed to `fork`. Closes four items from the list above:
 - Four fix branches pushed to `fork`.
 - `uv.lock` was already modified before this work began; left untouched and kept
   out of every commit.
-- `src/claude_trofeo_hud/__init__.py` is dead `uv init` scaffolding upstream
+- ~~`src/claude_trofeo_hud/__init__.py` is dead `uv init` scaffolding upstream~~ removed in the rename
   (the real package is at the repo root via `module-root = ""`). Not worth a PR
   on its own; fold into the next one.
 

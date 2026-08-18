@@ -5,15 +5,15 @@ from datetime import datetime, timedelta
 
 from PIL import Image, ImageColor, ImageDraw
 
-from claude_trofeo_hud import theme
-from claude_trofeo_hud.render import widgets as w
-from claude_trofeo_hud.render.layout import (
+from trofeo_hud import theme
+from trofeo_hud.render import widgets as w
+from trofeo_hud.render.layout import (
     HEIGHT,
     WIDTH,
     gauge_rows,
     render,
 )
-from claude_trofeo_hud.state import HudState, LimitGauge, mock_state
+from trofeo_hud.state import HudState, LimitGauge, mock_state
 
 NOW = datetime(2026, 8, 17, 14, 51)
 

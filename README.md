@@ -6,8 +6,7 @@ A desk HUD that shows live Claude usage on a Thermalright Trofeo Vision 6.86"
 LCD (1280×480, USB-C, ~$38), driven from macOS. Inspired by the r/ClaudeAI
 "$38 Claude LCD Table Display" post. Started as a fork of
 [christensen143/claude-trofeo-hud](https://github.com/christensen143/claude-trofeo-hud)
-and now developed independently here; the Python package, CLI, and log/config
-paths keep the original `claude-trofeo-hud` name.
+and now developed independently here.
 
 ![Live HUD render — session/weekly limit gauges, today's tokens and cost, current session activity, hourly burn sparkline](docs/hud.png)
 
@@ -53,17 +52,25 @@ showing an empty bar.
 ```bash
 git clone https://github.com/m-kk/trofeo-hud.git && cd trofeo-hud
 uv sync
-uv run python -m claude_trofeo_hud preview   # render mock layout to out/preview.png
-uv run python -m claude_trofeo_hud run       # live HUD on the LCD (Ctrl-C stops)
-uv run python -m claude_trofeo_hud install-agent   # start at login via launchd
+uv run trofeo-hud preview         # render mock layout to out/preview.png
+uv run trofeo-hud run             # live HUD on the LCD (Ctrl-C stops)
+uv run trofeo-hud install-agent   # start at login via launchd
 ```
+
+(`python -m trofeo_hud …` is equivalent.)
 
 On the first `run`, macOS asks for Keychain access to "Claude Code-credentials"
 — choose **Always Allow** so the daemon can run unattended.
 
 `uninstall-agent` stops and removes the launchd agent. Config lives in
-[config.toml](config.toml) (fps, JPEG quality, night dim/off hours). Logs go to
-`~/Library/Logs/claude-trofeo-hud/`.
+[config.toml](config.toml) next to the project or `~/.config/trofeo-hud/config.toml`
+(fps, JPEG quality, night dim/off hours; the pre-rename
+`~/.config/claude-trofeo-hud/` location is still read as a fallback). Logs go to
+`~/Library/Logs/trofeo-hud/`.
+
+Upgrading from a `claude-trofeo-hud` checkout: run `install-agent` again — it
+also stops and removes the old `com.varlogchris.claude-trofeo-hud` launchd
+agent so two daemons don't fight over the panel.
 
 ## How it drives the display
 
@@ -81,7 +88,7 @@ See [PLANNING.md](PLANNING.md) for the full protocol notes.
   device via libusb instead of hidapi; make sure you're running our CLI, not
   `trcc` directly.
 - **Panel shows boot logo / blanks** — no frames arriving; check
-  `~/Library/Logs/claude-trofeo-hud/hud.log`. Unplug/replug is handled
+  `~/Library/Logs/trofeo-hud/hud.log`. Unplug/replug is handled
   automatically with backoff.
 - **Empty cost/tokens** — `npx ccusage` must work in a terminal first; the
   launchd agent bakes the node path into its plist at install time, so

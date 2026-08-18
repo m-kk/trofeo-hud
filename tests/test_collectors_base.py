@@ -1,7 +1,7 @@
 """Collector retry pacing. A failing collector must not keep its cadence —
 re-hitting a throttled endpoint every 60s is what sustains the throttle."""
 
-from claude_trofeo_hud.collectors.base import Collector, SharedState
+from trofeo_hud.collectors.base import Collector, SharedState
 
 
 class _FakeStop:

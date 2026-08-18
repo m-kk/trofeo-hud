@@ -128,35 +128,6 @@ wheels = [
 ]
 
 [[package]]
-name = "claude-trofeo-hud"
-version = "0.1.0"
-source = { editable = "." }
-dependencies = [
-    { name = "hidapi" },
-    { name = "pillow" },
-    { name = "trcc-linux" },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "pytest" },
-    { name = "ruff" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "hidapi", specifier = ">=0.15.0" },
-    { name = "pillow", specifier = ">=12.3.0" },
-    { name = "trcc-linux", specifier = ">=9.9.8" },
-]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "pytest", specifier = ">=9.1.1" },
-    { name = "ruff", specifier = ">=0.16.3" },
-]
-
-[[package]]
 name = "click"
 version = "8.4.2"
 source = { registry = "https://pypi.org/simple" }
@@ -945,6 +916,35 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/74/96/a3a06d57c878672f5f47861946f0ab49cc0af0ac999f14ef6fe3f6ad30fd/trcc_linux-9.9.9.tar.gz", hash = "sha256:83ecc2b2e012484b84adcd3d2352c1dabefc293d3eb1435fbde9a569c6ece02c", size = 25972635, upload-time = "2026-08-16T15:44:29.858Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/aa/97/b8887960b1f511e5b2700d3046cf0541783e6d173a9bac225b8a59e9786e/trcc_linux-9.9.9-py3-none-any.whl", hash = "sha256:2841c638ee162f8f790046290d3106fde304a812963b9b68616b4133d0b5512b", size = 26079197, upload-time = "2026-08-16T15:44:26.592Z" },
+]
+
+[[package]]
+name = "trofeo-hud"
+version = "0.1.0"
+source = { editable = "." }
+dependencies = [
+    { name = "hidapi" },
+    { name = "pillow" },
+    { name = "trcc-linux" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "pytest" },
+    { name = "ruff" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "hidapi", specifier = ">=0.15.0" },
+    { name = "pillow", specifier = ">=12.3.0" },
+    { name = "trcc-linux", specifier = ">=9.9.8" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "pytest", specifier = ">=9.1.1" },
+    { name = "ruff", specifier = ">=0.16.3" },
 ]
 
 [[package]]

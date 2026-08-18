@@ -111,7 +111,7 @@ def mock_state(now: datetime | None = None) -> HudState:
             week_cost_usd=581.20,
         ),
         activity=Activity(
-            project="claude-trofeo-hud",
+            project="trofeo-hud",
             model="Fable 5",
             active=True,
             last_event=now - timedelta(seconds=8),

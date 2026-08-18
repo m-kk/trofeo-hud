@@ -1,4 +1,4 @@
-# claude-trofeo-hud configuration (all fields optional)
+# trofeo-hud configuration (all fields optional)
 
 fps = 2.0
 jpeg_quality = 90

@@ -8,8 +8,13 @@ import subprocess
 import sys
 from pathlib import Path
 
-LABEL = "com.varlogchris.claude-trofeo-hud"
-PLIST = Path.home() / "Library" / "LaunchAgents" / f"{LABEL}.plist"
+LABEL = "io.github.m-kk.trofeo-hud"
+# Label used before the project was renamed from claude-trofeo-hud. Retired on
+# every install/uninstall so an upgrade doesn't leave two daemons on the panel.
+LEGACY_LABEL = "com.varlogchris.claude-trofeo-hud"
+_AGENTS = Path.home() / "Library" / "LaunchAgents"
+PLIST = _AGENTS / f"{LABEL}.plist"
+LEGACY_PLIST = _AGENTS / f"{LEGACY_LABEL}.plist"
 
 
 def _plist_dict(log_dir: Path) -> dict:
@@ -25,7 +30,7 @@ def _plist_dict(log_dir: Path) -> dict:
     ) if p)
     return {
         "Label": LABEL,
-        "ProgramArguments": [str(python), "-m", "claude_trofeo_hud", "run"],
+        "ProgramArguments": [str(python), "-m", "trofeo_hud", "run"],
         "WorkingDirectory": str(project),
         "EnvironmentVariables": {"PATH": path},
         "RunAtLoad": True,
@@ -51,10 +56,17 @@ def install(log_dir: Path) -> None:
     print(f"installed + started {LABEL}\n  plist: {PLIST}\n  logs:  {log_dir}")
 
 
+def _bootout(label: str, plist: Path) -> bool:
+    """Stop `label` and drop its plist; True if a running agent was stopped."""
+    r = _launchctl("bootout", f"gui/{os.getuid()}/{label}")
+    if plist.exists():
+        plist.unlink()
+    return r.returncode == 0
+
+
 def uninstall(quiet: bool = False) -> None:
-    r = _launchctl("bootout", f"gui/{os.getuid()}/{LABEL}")
-    if PLIST.exists():
-        PLIST.unlink()
+    if _bootout(LEGACY_LABEL, LEGACY_PLIST) and not quiet:
+        print(f"stopped and removed legacy agent {LEGACY_LABEL}")
+    stopped = _bootout(LABEL, PLIST)
     if not quiet:
-        stopped = "stopped and " if r.returncode == 0 else ""
-        print(f"{stopped}removed {LABEL}")
+        print(f"{'stopped and ' if stopped else ''}removed {LABEL}")

@@ -1,4 +1,4 @@
-"""Config: config.toml next to the project (or ~/.config/claude-trofeo-hud/).
+"""Config: config.toml next to the project (or ~/.config/trofeo-hud/).
 
 Missing file or fields fall back to defaults; a broken file logs and uses
 defaults rather than refusing to start (the HUD is an appliance).
@@ -15,6 +15,8 @@ log = logging.getLogger(__name__)
 
 _CANDIDATES = [
     Path(__file__).resolve().parent.parent / "config.toml",
+    Path.home() / ".config" / "trofeo-hud" / "config.toml",
+    # pre-rename location, still honoured so an upgrade keeps its settings
     Path.home() / ".config" / "claude-trofeo-hud" / "config.toml",
 ]
 
@@ -42,7 +44,7 @@ class Config:
     night: Night = field(default_factory=Night)
     log_dir: Path = field(
         default_factory=lambda: Path.home() / "Library" / "Logs"
-        / "claude-trofeo-hud")
+        / "trofeo-hud")
 
 
 def load() -> Config:
