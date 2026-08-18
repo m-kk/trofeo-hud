@@ -12,8 +12,10 @@ LCD (1280×480, USB HID) from macOS. Now a standalone project at
 (remote `upstream`), where milestones M1–M4 were done (pixels on glass →
 static layout → live collectors → launchd daemon).
 
-The old fork `m-kk/claude-trofeo-hud` (remote `fork`) is kept only while the
-upstream PRs below are open; delete it once they resolve.
+This is now an independent project: it does not track upstream, and changes
+are not shaped for upstream mergeability. The old fork
+`m-kk/claude-trofeo-hud` (remote `fork`) is kept only while the upstream PRs
+below are open; delete it once they resolve.
 
 Renamed 2026-08-18: package `trofeo_hud`, CLI `trofeo-hud`, logs in
 `~/Library/Logs/trofeo-hud/`, config in `~/.config/trofeo-hud/` (the old
@@ -21,6 +23,35 @@ Renamed 2026-08-18: package `trofeo_hud`, CLI `trofeo-hud`, logs in
 `io.github.m-kk.trofeo-hud` (install/uninstall also retire the old
 `com.varlogchris.claude-trofeo-hud` agent). The dead `src/claude_trofeo_hud`
 scaffold is gone.
+
+## Open issues (2026-08-18)
+
+No GitHub issues on `m-kk/trofeo-hud`. What is actually open:
+
+- **Field-test USB reconnect** (TASKS.md Phase 4) — unplug/replug the panel
+  and confirm the daemon recovers. Never done; the reconnect path and the #3
+  soft-failure path are unit-tested only.
+- **Live soak of the #6 limits collector.** The daemon was restarted at 15:16
+  today onto current `main` (it had been running pre-fix code since 14:58);
+  the collector has run against the live endpoint only since then. Check
+  `~/Library/Logs/trofeo-hud/hud.log` for 429s / `AUTH EXPIRED` after a day.
+- **Upstream PRs #3–#7** are still open at `christensen143/claude-trofeo-hud`.
+  Nothing here waits on them; delete `fork` and the local `fix/*` branches
+  once they close.
+- **Fallback 5-hour estimate from JSONL** when the usage endpoint fails
+  (TASKS.md Phase 3) — unstarted; stale-flag + last-good is the current
+  behaviour.
+- **Native JSONL parser** to drop the Node/ccusage dependency — optional,
+  unstarted.
+- **Phase 5 stretch** (screen cycling, calendar countdown, theming) —
+  unstarted.
+
+Fixed today, outside git: the `.venv` had been carried over from a checkout
+at `~/Downloads/display/claude-trofeo-hud`, so every console script's shebang
+(`pytest`, `ruff`, `trofeo-hud`) pointed at a path that no longer existed and
+`uv run pytest` failed with `ModuleNotFoundError`. `uv sync --reinstall`
+rewrote them; 129 tests pass, ruff clean. The launchd agent itself was
+unaffected (it invokes `.venv/bin/python3 -m trofeo_hud`).
 
 ## Current work
 
@@ -114,7 +145,8 @@ Branch `explore`, pushed to `fork`. Closes four items from the list above:
 ## Local repo state
 
 - `main` on `origin` (m-kk/trofeo-hud) is the working branch; the local
-  checkout still calls it `explore` and tracks `origin/main`.
+  checkout still calls it `explore` and tracks `origin/main`. Local `main` is
+  kept fast-forwarded to `origin/main` but is not the checked-out branch.
 - The five `fix/*` branches exist on `origin` and `fork` while the upstream
   PRs are open.
 - `docs/usage-endpoint.md` carries account telemetry — never fold it into an
@@ -127,5 +159,6 @@ Branch `explore`, pushed to `fork`. Closes four items from the list above:
   the control flow, but recovery from a real soft failure is not field-proven —
   there is no way to induce one on demand. `TASKS.md` Phase 4's unplug/replug
   field test is still open and now matters more.
-- **#6's collector was never run against the live endpoint** — the account was
-  rate-limited (see above). Unit-tested with faked HTTP only.
+- **#6's collector has run live only since 15:16 today** — before that the
+  account was rate-limited and the daemon was on pre-fix code. Unit-tested
+  with faked HTTP; live behaviour beyond a clean startup is not yet observed.

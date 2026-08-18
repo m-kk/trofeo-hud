@@ -1,4 +1,4 @@
-# Claude Trofeo HUD — Tasks
+# trofeo-hud — Tasks
 
 See [PLANNING.md](PLANNING.md) for context. Tasks are ordered; each phase ends
 with something demonstrable. Check items off as they land.
@@ -7,7 +7,7 @@ with something demonstrable. Check items off as they land.
 
 - [x] `git init`, `.gitignore` (Python, macOS) *(init done; .gitignore pending)*
 - [x] `uv init` with Python 3.12+; add `ruff` + `pytest` dev deps *(uv done; dev deps pending)*
-- [x] Skeleton package: `claude_trofeo_hud/` with `render/`, `display/`
+- [x] Skeleton package: `trofeo_hud/` (originally `claude_trofeo_hud/`) with `render/`, `display/`
       (`collectors/` lands with Phase 3)
 - [x] `config.toml` loader with sensible defaults — `config.py` (fps, JPEG
       quality, night schedule)
@@ -41,8 +41,8 @@ with something demonstrable. Check items off as they land.
 - [x] Widget primitives: progress bar, sparkline, status dot, formatters — `render/widgets.py`
 - [x] Layout for 1280×480: limits / tokens / activity+clock zones + sparkline
       footer — `render/layout.py`
-- [x] Preview mode: `python -m claude_trofeo_hud preview [out.png]`; panel
-      streaming: `python -m claude_trofeo_hud panel [--seconds N --fps F]`
+- [x] Preview mode: `python -m trofeo_hud preview [out.png]`; panel
+      streaming: `python -m trofeo_hud panel [--seconds N --fps F]`
 - [x] Renderer tests: structural smoke tests + formatter units in
       `tests/test_render.py` (pixel-golden skipped — font-dependent across machines)
 - [x] Iterate on design with user feedback — approved
@@ -56,14 +56,17 @@ with something demonstrable. Check items off as they land.
       `GET https://api.anthropic.com/api/oauth/usage` with
       `Authorization: Bearer` + `anthropic-beta: oauth-2025-04-20`;
       response `five_hour`/`seven_day` = `{utilization, resets_at}`
-- [x] `limits.py` collector: session %, weekly %, reset timestamps; 60 s
-      cadence; token re-read from Keychain each refresh (Claude Code rotates it)
+- [x] `limits.py` collector: session %, weekly %, reset timestamps; 300 s
+      cadence (was 60 s — the endpoint admits ~1 call/2 min, see
+      docs/usage-endpoint.md); token re-read from Keychain each refresh
+      (Claude Code rotates it); `AUTH EXPIRED` from Keychain `expiresAt`
 - [x] Errors → stale flag, last-good values kept
 - [ ] Fallback path: estimate 5-hour block usage from JSONL timestamps if endpoint fails
 
 ### Tokens & cost
 
-- [x] Verify `ccusage` output: `npx ccusage@latest daily --json` works
+- [x] Verify `ccusage` output: `npx ccusage daily --json` works (pinned to
+      `20.0.20` — see docs/code-review-findings.md §1.4)
 - [x] `tokens.py` collector: today + this-week totals, in/out/cache split,
       hypothetical cost; 60 s cadence (session count comes from activity;
       per-model breakdown not displayed yet)
@@ -89,9 +92,10 @@ with something demonstrable. Check items off as they land.
 - [x] USB reconnect loop with capped exponential backoff in `app.py`
       (collectors keep running; first frame after reconnect is current)
 - [ ] Field-test reconnect: unplug/replug the panel and confirm recovery
+      *(still open 2026-08-18 — see docs/project-status.md “Open issues”)*
 - [x] launchd LaunchAgent via `install-agent` / `uninstall-agent` subcommands
       (venv python + node PATH baked into plist; KeepAlive; installed & running)
-- [x] Rotating file logging to `~/Library/Logs/claude-trofeo-hud/`; `--verbose`
+- [x] Rotating file logging to `~/Library/Logs/trofeo-hud/`; `--verbose`
 - [x] Warn/critical colors at 80%/95% (`theme.limit_color`, wired since Phase 2)
 - [x] Night mode in `config.toml`: off/dim schedule (`config.py` + `app._frame`)
 - [x] README: hardware, install, Keychain note, troubleshooting
