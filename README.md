@@ -1,8 +1,13 @@
-# claude-trofeo-hud
+# trofeo-hud
+
+**Repo:** <https://github.com/m-kk/trofeo-hud>
 
 A desk HUD that shows live Claude usage on a Thermalright Trofeo Vision 6.86"
 LCD (1280×480, USB-C, ~$38), driven from macOS. Inspired by the r/ClaudeAI
-"$38 Claude LCD Table Display" post.
+"$38 Claude LCD Table Display" post. Started as a fork of
+[christensen143/claude-trofeo-hud](https://github.com/christensen143/claude-trofeo-hud)
+and now developed independently here; the Python package, CLI, and log/config
+paths keep the original `claude-trofeo-hud` name.
 
 ![Live HUD render — session/weekly limit gauges, today's tokens and cost, current session activity, hourly burn sparkline](docs/hud.png)
 
@@ -46,6 +51,7 @@ showing an empty bar.
 ## Setup
 
 ```bash
+git clone https://github.com/m-kk/trofeo-hud.git && cd trofeo-hud
 uv sync
 uv run python -m claude_trofeo_hud preview   # render mock layout to out/preview.png
 uv run python -m claude_trofeo_hud run       # live HUD on the LCD (Ctrl-C stops)

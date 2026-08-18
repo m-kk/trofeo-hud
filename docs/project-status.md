@@ -1,17 +1,19 @@
 # Project status
 
-_Updated 2026-08-17._
+_Updated 2026-08-18._
 
 ## What this repo is
 
 A desk HUD rendering Claude Code usage to a Thermalright Trofeo Vision 6.86"
-LCD (1280×480, USB HID) from macOS. Upstream is
-[`christensen143/claude-trofeo-hud`](https://github.com/christensen143/claude-trofeo-hud);
-milestones M1–M4 are complete there (pixels on glass → static layout → live
-collectors → launchd daemon).
+LCD (1280×480, USB HID) from macOS. Now a standalone project at
+[`m-kk/trofeo-hud`](https://github.com/m-kk/trofeo-hud) (git remote `origin`;
+`main` = the former `explore` branch). It began as a fork of
+[`christensen143/claude-trofeo-hud`](https://github.com/christensen143/claude-trofeo-hud)
+(remote `upstream`), where milestones M1–M4 were done (pixels on glass →
+static layout → live collectors → launchd daemon).
 
-**We have READ access only.** Contributions go through a fork at
-`m-kk/claude-trofeo-hud` (git remote `fork`) and PRs against upstream `main`.
+The old fork `m-kk/claude-trofeo-hud` (remote `fork`) is kept only while the
+upstream PRs below are open; delete it once they resolve.
 
 ## Current work
 
