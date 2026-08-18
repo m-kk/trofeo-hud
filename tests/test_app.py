@@ -85,6 +85,69 @@ def test_repeated_declines_are_not_logged_every_frame(shared, cfg, panel, caplog
     assert len(declined) < panel.sent, "must not log once per frame"
 
 
+# ── …unless the device itself is gone ────────────────────────────────────
+#
+# Field test 2026-08-18: unplug → every send returned False ("short chunk
+# write") — hidapi on macOS returns -1 instead of raising, and trcc's
+# keepalive_stream path turns even a raise into False. Replug → still False,
+# forever: our handle pointed at the old device instance. The decline signal
+# alone cannot distinguish "hiccup" from "gone", so the loop asks the panel
+# whether the device it opened is still on the bus.
+
+
+def test_declined_frame_checks_that_the_device_is_still_attached(shared, cfg, panel):
+    panel.send_results = [False, True]
+    _run(shared, cfg, panel, seconds=1.0)
+    assert "still_attached" in panel.calls
+
+
+def test_accepted_frames_do_not_enumerate(shared, cfg, panel):
+    _run(shared, cfg, panel, seconds=2.0)
+    assert "still_attached" not in panel.calls
+
+
+def test_declined_frames_with_the_device_gone_reconnect(shared, cfg, panel):
+    panel.send_results = [False, False, True]
+    panel.attached_results = [False, True]  # gone on the first check, back after
+
+    _run(shared, cfg, panel, seconds=3.0)
+
+    assert panel.connects >= 2, "must re-handshake once the device has gone away"
+    assert panel.calls.index("close") < panel.calls.index("connect", 1)
+    assert panel.sent >= 3, "and stream again after the reconnect"
+
+
+def test_device_gone_path_still_paces(shared, cfg, panel, clock):
+    panel.send_results = [False]
+    panel.attached_results = [False]
+    _run(shared, cfg, panel, seconds=3.0)
+    assert clock.sleeps and all(s > 0 for s in clock.sleeps)
+
+
+def test_unbroken_declines_with_the_device_present_eventually_reconnect(
+    shared, cfg, panel, caplog
+):
+    """Belt and braces: if the presence check missed a fast replug (same
+    VID:PID, and enumeration happened to say "present"), the handle is still
+    dead. A decline is by definition transient — the next keepalive tick is
+    supposed to resend — so a run of them longer than _DECLINE_RECONNECT_S is
+    not a decline any more; it is a dead handle, and nothing is on the glass
+    either way."""
+    panel.send_results = [False]
+
+    with caplog.at_level("WARNING", logger=app.log.name):
+        _run(shared, cfg, panel, seconds=app._DECLINE_RECONNECT_S * 3)
+
+    assert panel.connects >= 2
+    assert any("reconnecting" in r.getMessage() for r in caplog.records)
+
+
+def test_short_runs_of_declines_do_not_hit_the_time_cap(shared, cfg, panel):
+    panel.send_results = [False]
+    _run(shared, cfg, panel, seconds=app._DECLINE_RECONNECT_S / 2)
+    assert panel.connects == 1
+
+
 # ── A raised send is a genuine transport failure: reconnect ──────────────
 
 

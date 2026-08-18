@@ -28,9 +28,9 @@ scaffold is gone.
 
 No GitHub issues on `m-kk/trofeo-hud`. What is actually open:
 
-- **Field-test USB reconnect** (TASKS.md Phase 4) — unplug/replug the panel
-  and confirm the daemon recovers. Never done; the reconnect path and the #3
-  soft-failure path are unit-tested only.
+- **Field-test USB reconnect** (TASKS.md Phase 4) — done 15:35 today, and it
+  **failed**: see "Unplug field test" below. Fixed; a second replug is the
+  remaining confirmation.
 - **Live soak of the #6 limits collector.** The daemon was restarted at 15:16
   today onto current `main` (it had been running pre-fix code since 14:58);
   the collector has run against the live endpoint only since then. Check
@@ -50,6 +50,33 @@ at `~/Downloads/display/claude-trofeo-hud`, so every console script's shebang
 `uv run pytest` failed with `ModuleNotFoundError`. `uv sync --reinstall`
 rewrote them; 129 tests pass, ruff clean. The launchd agent itself was
 unaffected (it invokes `.venv/bin/python3 -m trofeo_hud`).
+
+## Unplug field test — failed, fixed (2026-08-18)
+
+Unplugged at 15:35:29. Every `send()` from then on returned `False`
+("HidLcd: short chunk write at offset 0"), ~2/s; replugging changed nothing —
+150+ declines and climbing, no reconnect, blank panel. Cause: on macOS
+hidapi's `write()` to an unplugged device returns -1 instead of raising, so
+trcc reports a soft decline; and with the `keepalive_stream` quirk trcc turns
+even a raise into `False`. Fix #3's rule ("never reconnect on `False`") was
+therefore absolute, and a replugged panel comes back as a *new* device
+instance our stale handle can't reach.
+
+Fix (`app.py`, `display/panel.py`): on a decline the loop asks
+`TrofeoPanel.still_attached()`, which enumerates HID and checks that the
+`path` recorded at connect (`DevSrvsID:<IORegistry id>`, unique per plug-in)
+is still present — absent *or replaced* → close and re-enter the connect/backoff
+loop. Belt and braces: an unbroken run of declines longer than
+`_DECLINE_RECONNECT_S` (30 s) with the device apparently present also
+reconnects — a decline is transient by definition; 30 s of them is a dead
+handle and nothing is on the glass either way. A single decline with the
+device present still does not reconnect (#3 stands; #228 wedge). Enumeration
+only runs on declines. `close()` swallows a failing driver disconnect.
+
+**Re-test needed:** unplug, wait ≥5 s, replug; expect `panel declined N
+frame(s) and the device is no longer attached — reconnecting`, then connect
+retries with backoff, then `panel connected`. Reconnect may take up to 60 s
+after the replug (backoff cap).
 
 ## Native transcripts + session fallback (2026-08-18)
 
@@ -180,11 +207,10 @@ Branch `explore`, pushed to `fork`. Closes four items from the list above:
 
 ## Verification gaps
 
-- **No hardware access this session.** Every test runs against a fake panel. The
-  #3 fix follows the trcc driver author's explicit instruction and its tests pin
-  the control flow, but recovery from a real soft failure is not field-proven —
-  there is no way to induce one on demand. `TASKS.md` Phase 4's unplug/replug
-  field test is still open and now matters more.
+- **Unplug/replug**: field-tested once (failed, fixed — see above); the fix
+  itself is unit-tested against a fake panel and awaits a second replug.
+  Genuine soft failures (#228-style, device present) still cannot be induced
+  on demand.
 - **#6's collector has run live only since 15:16 today** — before that the
   account was rate-limited and the daemon was on pre-fix code. Unit-tested
   with faked HTTP; live behaviour beyond a clean startup is not yet observed.

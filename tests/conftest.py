@@ -65,6 +65,8 @@ class FakePanel:
     calls: list[str] = dataclasses.field(default_factory=list)
     sent: int = 0
     qualities: list[int] = dataclasses.field(default_factory=list)
+    # What `still_attached()` answers; a list is consumed like the others.
+    attached_results: list = dataclasses.field(default_factory=lambda: [True])
     _dev: bool = False
 
     @property
@@ -90,6 +92,10 @@ class FakePanel:
         if isinstance(outcome, BaseException):
             raise outcome
         return outcome
+
+    def still_attached(self) -> bool:
+        self.calls.append("still_attached")
+        return self._next(self.attached_results)
 
     def close(self) -> None:
         self.calls.append("close")

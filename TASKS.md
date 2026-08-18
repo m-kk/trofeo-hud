@@ -94,7 +94,9 @@ with something demonstrable. Check items off as they land.
 - [x] USB reconnect loop with capped exponential backoff in `app.py`
       (collectors keep running; first frame after reconnect is current)
 - [ ] Field-test reconnect: unplug/replug the panel and confirm recovery
-      *(still open 2026-08-18 — see docs/project-status.md “Open issues”)*
+      *(2026-08-18: tested — did NOT recover; unplug surfaces as a soft decline
+      on macOS. Fixed via HID presence check + decline time cap; re-test
+      pending — see docs/project-status.md)*
 - [x] launchd LaunchAgent via `install-agent` / `uninstall-agent` subcommands
       (venv python + node PATH baked into plist; KeepAlive; installed & running)
 - [x] Rotating file logging to `~/Library/Logs/trofeo-hud/`; `--verbose`
