@@ -376,8 +376,6 @@ def test_absent_expiry_field_is_not_treated_as_expired(monkeypatch, collector):
     assert collector.shared.snapshot().limits.auth_expired is False
 
 
-
-
 # ── Failures keep last-good values ───────────────────────────────────────
 
 
@@ -436,3 +434,187 @@ def test_collector_uses_the_guarded_opener():
 
     assert "_OPENER.open(" in src
     assert "urllib.request.urlopen(" not in src
+
+
+# ── Fallback: estimate the 5-hour block from the transcripts ─────────────
+#
+# When the endpoint is unreachable (429s, expired token) the panel would
+# otherwise hold a frozen percentage until — and past — its reset. The
+# transcripts on disk know when this block began (the first request after the
+# previous block ended), so the countdown at least can be honest; and while
+# the last good sample's window is still live, its percentage can be scaled
+# by the cost accrued since. Both are labelled as estimates.
+
+from pathlib import Path  # noqa: E402
+
+from trofeo_hud.collectors import transcripts as tx  # noqa: E402
+from trofeo_hud.collectors.limits import (  # noqa: E402
+    _SESSION_WINDOW_S,
+    estimate_session,
+)
+from trofeo_hud.collectors.transcripts import TranscriptLog, UsageEvent  # noqa: E402
+
+T = datetime(2026, 8, 18, 14, 0).astimezone()
+H = timedelta(hours=1)
+
+
+def _ev(ts, inp=0):
+    return UsageEvent(ts, "claude-opus-5", inp, 0, 0, 0, 0, Path("f"), "p", "s", None)
+
+
+class _StaticLog(TranscriptLog):
+    def __init__(self, events):
+        super().__init__(Path("/nonexistent"))
+        self._events = list(events)
+
+    def ingest(self, now):
+        pass
+
+
+def test_estimate_session_chains_blocks_from_the_first_event():
+    # 08:00 starts a block (→13:00); 12:59 is inside it; 13:01 starts the next.
+    events = [
+        _ev(T - 6 * H),
+        _ev(T - H - timedelta(minutes=1)),
+        _ev(T - timedelta(minutes=59)),
+    ]
+    g = estimate_session(events, T)
+    assert g.label == "Current session (est.)"
+    assert g.used_pct is None
+    assert g.window_s == _SESSION_WINDOW_S
+    assert g.resets_at == (T - timedelta(minutes=59) + 5 * H).replace(tzinfo=None)
+
+
+def test_estimate_session_uses_time_order_not_file_order():
+    events = [_ev(T - timedelta(minutes=59)), _ev(T - 6 * H)]
+    assert estimate_session(events, T).resets_at == (
+        T - timedelta(minutes=59) + 5 * H
+    ).replace(tzinfo=None)
+
+
+def test_estimate_session_is_none_between_blocks_or_without_events():
+    assert estimate_session([], T) is None
+    assert estimate_session([_ev(T - 6 * H)], T) is None  # that block ended at 13:00
+
+
+def _sample(monkeypatch, collector, resets_at_utc: str, pct: float):
+    payload = {"five_hour": {"utilization": pct, "resets_at": resets_at_utc}}
+    _wire(monkeypatch, datetime.now() + timedelta(hours=1), payload)
+    collector.refresh()
+
+
+def test_no_log_means_no_fallback(monkeypatch, collector):
+    """The collector without a transcript log behaves exactly as before."""
+    _wire(monkeypatch, datetime.now() - timedelta(minutes=1), RESPONSE)
+    collector.refresh()
+    assert collector.shared.snapshot().limits.session is None
+
+
+def test_fallback_estimates_the_block_when_there_is_no_gauge_yet(monkeypatch):
+    monkeypatch.setattr(tx, "local_now", lambda: T)
+    log = _StaticLog([_ev(T - 2 * H)])
+    c = mod.LimitsCollector(SharedState(), log=log)
+    _wire(monkeypatch, datetime.now() - timedelta(minutes=1), RESPONSE)  # token expired
+    c.refresh()
+    lim = c.shared.snapshot().limits
+    assert lim.auth_expired is True
+    assert lim.session.label == "Current session (est.)"
+    assert lim.session.used_pct is None
+    assert lim.session.resets_at == (T + 3 * H).replace(tzinfo=None)
+
+
+def test_fallback_replaces_a_gauge_whose_reset_has_passed(monkeypatch):
+    # Local blocks: T-8h..T-3h, then a fresh one from T-1h.
+    log = _StaticLog([_ev(T - 8 * H, inp=100), _ev(T - H, inp=100)])
+    c = mod.LimitsCollector(SharedState(), log=log)
+    # Good sample taken in a window the server says ends at T-2h.
+    monkeypatch.setattr(tx, "local_now", lambda: T - 3 * H)
+    _sample(monkeypatch, c, (T - 2 * H).astimezone(UTC).isoformat(), 60.0)
+    assert c.shared.snapshot().limits.session.used_pct == 60.0
+
+    monkeypatch.setattr(tx, "local_now", lambda: T)
+    c.mark_stale()
+    g = c.shared.snapshot().limits.session
+    assert g.label == "Current session (est.)"
+    assert g.used_pct is None, "no sample in this block — don't invent a percentage"
+    assert g.resets_at == (T - H + 5 * H).replace(tzinfo=None)
+
+
+def test_fallback_scales_the_last_sample_by_cost_accrued_since(monkeypatch):
+    # Block T-1h..T+4h. Sample at T with $X of usage in the block, 20%.
+    e1 = _ev(T - timedelta(minutes=30), inp=1_000_000)  # $5
+    log = _StaticLog([e1])
+    c = mod.LimitsCollector(SharedState(), log=log)
+    monkeypatch.setattr(tx, "local_now", lambda: T)
+    _sample(monkeypatch, c, (T + 4 * H).astimezone(UTC).isoformat(), 20.0)
+
+    # Then $10 more, endpoint fails.
+    log._events.append(_ev(T + timedelta(minutes=10), inp=2_000_000))
+    monkeypatch.setattr(tx, "local_now", lambda: T + timedelta(minutes=20))
+    c.mark_stale()
+    g = c.shared.snapshot().limits.session
+    assert g.label == "Current session (est.)"
+    assert g.used_pct == pytest.approx(60.0)  # 20% × (15/5)
+    assert g.resets_at == (T + 4 * H).replace(tzinfo=None), "the server's reset is kept"
+    assert c.shared.snapshot().limits.stale is True
+
+
+def test_fallback_caps_the_extrapolation_at_100(monkeypatch):
+    log = _StaticLog([_ev(T, inp=1_000_000)])
+    c = mod.LimitsCollector(SharedState(), log=log)
+    monkeypatch.setattr(tx, "local_now", lambda: T)
+    _sample(monkeypatch, c, (T + 4 * H).astimezone(UTC).isoformat(), 90.0)
+    log._events.append(_ev(T + H, inp=9_000_000))
+    monkeypatch.setattr(tx, "local_now", lambda: T + H)
+    c.mark_stale()
+    assert c.shared.snapshot().limits.session.used_pct == 100.0
+
+
+def test_fallback_holds_the_sample_when_it_had_no_local_cost_to_scale_from(monkeypatch):
+    """A sample taken with nothing in the local logs (usage from another
+    machine) has no ratio to scale by; keep its percentage rather than zeroing."""
+    log = _StaticLog([])
+    c = mod.LimitsCollector(SharedState(), log=log)
+    monkeypatch.setattr(tx, "local_now", lambda: T)
+    _sample(monkeypatch, c, (T + 4 * H).astimezone(UTC).isoformat(), 35.0)
+    log._events.append(_ev(T + H, inp=1))
+    monkeypatch.setattr(tx, "local_now", lambda: T + H)
+    c.mark_stale()
+    g = c.shared.snapshot().limits.session
+    assert g.used_pct == 35.0 and g.label == "Current session (est.)"
+
+
+def test_fallback_leaves_a_live_null_gauge_alone_when_no_sample_exists(monkeypatch):
+    """Server said null for the live window: still unknown, still its reset."""
+    log = _StaticLog([_ev(T)])
+    c = mod.LimitsCollector(SharedState(), log=log)
+    monkeypatch.setattr(tx, "local_now", lambda: T)
+    payload = {
+        "five_hour": {
+            "utilization": None,
+            "resets_at": (T + 4 * H).astimezone(UTC).isoformat(),
+        }
+    }
+    _wire(monkeypatch, datetime.now() + timedelta(hours=1), payload)
+    c.refresh()
+    monkeypatch.setattr(tx, "local_now", lambda: T + H)
+    c.mark_stale()
+    g = c.shared.snapshot().limits.session
+    assert g.used_pct is None and g.label == "Current session"
+
+
+def test_a_fresh_sample_restores_the_servers_label(monkeypatch):
+    log = _StaticLog([_ev(T)])
+    c = mod.LimitsCollector(SharedState(), log=log)
+    monkeypatch.setattr(tx, "local_now", lambda: T)
+    _sample(monkeypatch, c, (T + 4 * H).astimezone(UTC).isoformat(), 20.0)
+    c.mark_stale()
+    assert c.shared.snapshot().limits.session.label == "Current session (est.)"
+    _sample(monkeypatch, c, (T + 4 * H).astimezone(UTC).isoformat(), 25.0)
+    g = c.shared.snapshot().limits.session
+    assert g.label == "Current session" and g.used_pct == 25.0
+
+
+def test_unparseable_reset_timestamp_becomes_none():
+    lim = parse_usage({"five_hour": {"utilization": 1.0, "resets_at": "soon"}})
+    assert lim.session.used_pct == 1.0 and lim.session.resets_at is None

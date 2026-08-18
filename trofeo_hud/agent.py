@@ -1,9 +1,9 @@
 """launchd LaunchAgent install/uninstall for start-at-login operation."""
+
 from __future__ import annotations
 
 import os
 import plistlib
-import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -22,12 +22,9 @@ def _plist_dict(log_dir: Path) -> dict:
     # interpreter; resolving it loses the venv (and every package with it).
     python = Path(sys.executable)
     project = Path(__file__).resolve().parent.parent
-    # launchd agents get a bare PATH; npx (nvm) and brew libs must be findable.
-    node_bin = Path(shutil.which("npx") or "").parent
-    path = ":".join(p for p in (
-        str(node_bin), "/opt/homebrew/bin", "/usr/local/bin",
-        "/usr/bin", "/bin",
-    ) if p)
+    # launchd agents get a bare PATH; brew libs (hidapi) and `security` must
+    # be findable.
+    path = ":".join(("/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin"))
     return {
         "Label": LABEL,
         "ProgramArguments": [str(python), "-m", "trofeo_hud", "run"],

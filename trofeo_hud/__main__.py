@@ -112,14 +112,17 @@ def _start_collectors(wait: bool = False):
     from .collectors.base import SharedState
     from .collectors.limits import LimitsCollector
     from .collectors.tokens import TokensCollector
+    from .collectors.transcripts import TranscriptLog
 
     shared = SharedState()
+    transcripts = TranscriptLog()  # one reader over ~/.claude/projects, shared
     for cls in (TokensCollector, ActivityCollector, LimitsCollector):
-        cls(shared).start()
+        cls(shared, log=transcripts).start()
     if wait:
-        # First ccusage run can take a while (npx fetch + full log parse);
-        # give collectors a beat so the first frame isn't empty.
-        deadline = time.time() + 90
+        # The first pass over a week of transcripts and the first usage-endpoint
+        # round trip take a moment; give collectors a beat so the first frame
+        # isn't empty.
+        deadline = time.time() + 20
         while time.time() < deadline:
             s = shared.snapshot()
             if s.tokens.today_tokens and s.limits.session:

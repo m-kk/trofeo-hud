@@ -102,8 +102,9 @@ changes.
 
 - Phase 1: shell out to `ccusage` (`npx ccusage@latest --json`, plus daily/
   weekly variants) and read its JSON — battle-tested dedupe and pricing.
-- Phase 2 (optional): native Python parser to drop the Node dependency
-  (dedupe by message+request ID, static pricing table).
+- Phase 2: native Python parser to drop the Node dependency (dedupe by
+  message+request ID, static pricing table). *Done 2026-08-18 —
+  `collectors/transcripts.py` + `pricing.py`; ccusage retired.*
 
 **Live activity.** Watch mtimes of the newest JSONL files; the most recently
 modified file gives project (from directory name), model, and last-event

@@ -8,6 +8,12 @@ HTTPS — see `_NoCrossHostRedirect`, which is what enforces that.
 We deliberately do **not** refresh the token ourselves. The Keychain item is
 owned by Claude Code, and a second writer would race its rotation. Instead we
 read the expiry that ships alongside the token and say so on the panel.
+
+When the endpoint can't be read (throttled, token expired) the session gauge
+falls back to the transcripts on disk: the block's reset is estimated from
+event timestamps, and while the last good sample's window is still live its
+percentage is scaled by the cost accrued since. Labelled `(est.)`. Usage on
+other machines is invisible to this, so it is an estimate, not a reading.
 """
 
 from __future__ import annotations
@@ -19,11 +25,13 @@ import re
 import subprocess
 import urllib.error
 import urllib.request
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from email.utils import parsedate_to_datetime
 from urllib.parse import urlsplit
 
+from .. import pricing
 from ..state import LimitGauge, Limits
+from . import transcripts as tx
 from .base import Collector
 
 log = logging.getLogger(__name__)
@@ -40,6 +48,8 @@ _WEEK_WINDOW_S = 7 * 86400
 # resets_at stayed at 2026-08-18T00:19:59Z. A window whose reset doesn't move
 # with use has a meaningful elapsed fraction, so the marker is honest here.
 _SESSION_WINDOW_S = 5 * 3600
+_SESSION_LABEL = "Current session"
+_EST_LABEL = f"{_SESSION_LABEL} (est.)"
 _FABLE = "Fable"
 
 
@@ -187,7 +197,7 @@ def parse_usage(data: dict, plan: str | None = None) -> Limits:
         )
 
     return Limits(
-        session=gauge(data.get("five_hour"), "Current session", _SESSION_WINDOW_S),
+        session=gauge(data.get("five_hour"), _SESSION_LABEL, _SESSION_WINDOW_S),
         weekly=gauge(data.get("seven_day"), "All models", _WEEK_WINDOW_S),
         weekly_fable=gauge(
             _scoped_window(data.get("limits"), _FABLE),
@@ -208,6 +218,39 @@ def _local_naive(iso: str | None) -> datetime | None:
         return None
 
 
+def estimate_session(events: list[tx.UsageEvent], now: datetime) -> LimitGauge | None:
+    """The current 5-hour block, from transcript timestamps alone.
+
+    A block starts at the first request after the previous block ended, so
+    the chain is walked from the oldest event we hold; it re-anchors after
+    any gap of five hours or more, which makes a week of history plenty.
+    Returns None between blocks (the next request would start one) and never
+    guesses a percentage.
+    """
+    window = timedelta(seconds=_SESSION_WINDOW_S)
+    start = None
+    for ev in sorted(events, key=lambda e: e.ts):
+        if start is None or ev.ts >= start + window:
+            start = ev.ts
+    if start is None or now >= start + window:
+        return None
+    return LimitGauge(
+        label=_EST_LABEL,
+        used_pct=None,
+        resets_at=(start + window).astimezone().replace(tzinfo=None),
+        window_s=_SESSION_WINDOW_S,
+    )
+
+
+@dataclasses.dataclass(frozen=True)
+class _Sample:
+    """The last good session reading, with the local cost in its window then."""
+
+    resets_at: datetime  # local naive, as on the gauge
+    used_pct: float
+    cost_usd: float
+
+
 class LimitsCollector(Collector):
     name_ = "limits"
     # The endpoint admits roughly one call per two minutes (measured: at a 60s
@@ -215,6 +258,11 @@ class LimitsCollector(Collector):
     # moves slowly and the countdowns tick client-side off resets_at, so a
     # five-minute cadence costs the panel nothing and stays clear of the limit.
     cadence_s = 300.0
+
+    def __init__(self, shared, log: tx.TranscriptLog | None = None) -> None:
+        super().__init__(shared)
+        self.log = log
+        self._sample: _Sample | None = None
 
     def refresh(self) -> None:
         oauth = _oauth()
@@ -246,6 +294,7 @@ class LimitsCollector(Collector):
             data,
             plan=plan_label(oauth.get("subscriptionType"), oauth.get("rateLimitTier")),
         )
+        self._remember(limits.session)
         self.shared.update(limits=limits)
         log.debug(
             "limits: session=%s weekly=%s fable=%s",
@@ -258,9 +307,57 @@ class LimitsCollector(Collector):
         self._flag(stale=True)
 
     def _flag(self, **fields) -> None:
-        """Set flags while keeping the last-good gauges."""
+        """Set flags while keeping the last-good gauges — except the session
+        gauge, which is re-estimated from the transcripts when we have them."""
 
         def apply(state) -> None:
             state.limits = dataclasses.replace(state.limits, **fields)
+            if self.log is not None:
+                state.limits = dataclasses.replace(
+                    state.limits, session=self._fallback(state.limits.session)
+                )
 
         self.shared.mutate(apply)
+
+    # ── transcript fallback ──────────────────────────────────────────────
+
+    def _remember(self, session: LimitGauge | None) -> None:
+        self._sample = None
+        if self.log is None or session is None:
+            return
+        if session.resets_at is None or session.used_pct is None:
+            return
+        self._sample = _Sample(
+            session.resets_at, session.used_pct, self._window_cost(session.resets_at)
+        )
+
+    def _window_cost(self, resets_at: datetime) -> float:
+        now = tx.local_now()
+        self.log.ingest(now)
+        start = (resets_at - timedelta(seconds=_SESSION_WINDOW_S)).astimezone()
+        return sum(pricing.cost_usd(e) for e in self.log.events(since=start))
+
+    def _fallback(self, current: LimitGauge | None) -> LimitGauge | None:
+        now = tx.local_now()
+        live = (
+            current is not None
+            and current.resets_at is not None
+            and now.replace(tzinfo=None) < current.resets_at
+        )
+        if live:
+            sample = self._sample
+            if sample is None or sample.resets_at != current.resets_at:
+                return current  # nothing to scale from; the reading stands
+            if sample.cost_usd > 0:
+                pct = (
+                    sample.used_pct
+                    * self._window_cost(current.resets_at)
+                    / sample.cost_usd
+                )
+            else:
+                pct = sample.used_pct
+            return dataclasses.replace(
+                current, label=_EST_LABEL, used_pct=min(100.0, pct)
+            )
+        self.log.ingest(now)
+        return estimate_session(self.log.events(), now)

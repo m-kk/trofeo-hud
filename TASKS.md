@@ -61,22 +61,24 @@ with something demonstrable. Check items off as they land.
       docs/usage-endpoint.md); token re-read from Keychain each refresh
       (Claude Code rotates it); `AUTH EXPIRED` from Keychain `expiresAt`
 - [x] Errors → stale flag, last-good values kept
-- [ ] Fallback path: estimate 5-hour block usage from JSONL timestamps if endpoint fails
+- [x] Fallback path: estimate 5-hour block usage from JSONL timestamps if endpoint fails
+      *(2026-08-18: `limits.estimate_session` + cost-scaled last sample, labelled `(est.)`)*
 
 ### Tokens & cost
 
-- [x] Verify `ccusage` output: `npx ccusage daily --json` works (pinned to
-      `20.0.20` — see docs/code-review-findings.md §1.4)
-- [x] `tokens.py` collector: today + this-week totals, in/out/cache split,
+- [x] ~~Verify `ccusage` output~~ — ccusage retired 2026-08-18; see below
+- [x] `tokens.py` collector: today + trailing-7-day totals, in/out/cache split,
       hypothetical cost; 60 s cadence (session count comes from activity;
       per-model breakdown not displayed yet)
 - [x] Stale flag on failure (last-good value kept)
-- [ ] (Optional, later) native JSONL parser to drop the Node/ccusage dependency
+- [x] Native JSONL parser (`collectors/transcripts.py` + `pricing.py`) — the Node/ccusage
+      dependency is gone; dedupe on `message.id`+`requestId`, subagent files and
+      advisor iterations included, validated against ccusage 20.0.20 output
 
 ### Live activity
 
-- [x] `activity.py` collector: incremental JSONL tail (byte offsets) →
-      project (from `cwd` field), model, active/idle, 5 s cadence
+- [x] `activity.py` collector: reads the shared `TranscriptLog` (incremental
+      byte-offset tail, deduped) → project (from `cwd`), model, active/idle, 5 s cadence
 - [x] Burn rate: tokens over trailing 10-minute window
 - [x] Daily usage sparkline series (hourly token buckets since midnight)
 

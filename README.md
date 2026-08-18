@@ -12,7 +12,7 @@ and now developed independently here.
 
 What it shows: Pro/Max session + weekly limit bars with reset countdowns
 (from Anthropic's usage endpoint), today's tokens and estimated API cost
-(via [ccusage](https://github.com/ryoppippi/ccusage)), the live session
+(parsed natively from Claude Code's transcripts), the live session
 (project, model, burn rate), a clock, and an hourly token sparkline.
 
 ### Reading the limit gauges
@@ -41,21 +41,29 @@ showing an empty bar.
 
 ## Requirements
 
-- macOS, Python 3.12+, [uv](https://docs.astral.sh/uv/), Node (for `npx ccusage`)
+- macOS, Python 3.12+, [uv](https://docs.astral.sh/uv/)
 - `brew install hidapi` (C library behind the `hidapi` Python package)
 - Claude Code installed and logged in (the HUD reads its local logs and its
   OAuth token from the Keychain — read-only, and the only thing sent anywhere
   is the usage query to api.anthropic.com)
 
-### A note on `ccusage`
+### Where the numbers come from
 
-Token and cost figures come from [ccusage](https://github.com/ryoppippi/ccusage),
-third-party code that the daemon executes via `npx` every 60 seconds. It is
-pinned to an exact version in `collectors/tokens.py`, so upgrading it is a
-deliberate, reviewable change rather than something that happens on its own —
-worth knowing, since the daemon runs with standing Keychain access. With a warm
-npm cache the run needs no network, but resolving the package can reach the
-registry when that cache goes stale.
+Token counts and the "est. API cost" are computed natively from Claude Code's
+own transcripts (`~/.claude/projects/**/*.jsonl`, including subagent
+transcripts), deduplicated the way ccusage does — one API message is written
+as several lines with identical `usage` — and priced at Anthropic's list rates
+(`trofeo_hud/pricing.py`; the table is dated, bump it when prices move).
+Advisor-tool calls that Claude Code itemises under `usage.iterations` are
+counted at their own model's rate. Cost is what the usage *would* have cost
+pay-as-you-go; on a subscription it is a proxy for how hard the plan is being
+worked. Nothing is executed from npm and no network is used for this.
+
+When the usage endpoint can't be read (throttled, or the token has expired) the
+session gauge falls back to the transcripts: the block's reset time is
+estimated from request timestamps and, while the last good reading's window is
+still live, its percentage is scaled by the cost accrued since. Such gauges are
+labelled `(est.)` — usage on other machines is invisible to the estimate.
 
 ## Setup
 
@@ -100,9 +108,9 @@ See [PLANNING.md](PLANNING.md) for the full protocol notes.
 - **Panel shows boot logo / blanks** — no frames arriving; check
   `~/Library/Logs/trofeo-hud/hud.log`. Unplug/replug is handled
   automatically with backoff.
-- **Empty cost/tokens** — `npx ccusage` must work in a terminal first; the
-  launchd agent bakes the node path into its plist at install time, so
-  re-run `install-agent` after Node upgrades.
+- **Empty cost/tokens** — the HUD reads `~/.claude/projects/**/*.jsonl`;
+  make sure Claude Code has been used on this machine today and that the
+  files are readable. Only files modified in the last 8 days are opened.
 - **Panel shows "AUTH EXPIRED"** — the OAuth token in the Keychain has expired.
   Only Claude Code can refresh it (the HUD deliberately won't write to that
   Keychain item — a second writer would race Claude Code's own rotation), so

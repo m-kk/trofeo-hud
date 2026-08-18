@@ -38,13 +38,11 @@ No GitHub issues on `m-kk/trofeo-hud`. What is actually open:
 - **Upstream PRs #3–#7** are still open at `christensen143/claude-trofeo-hud`.
   Nothing here waits on them; delete `fork` and the local `fix/*` branches
   once they close.
-- **Fallback 5-hour estimate from JSONL** when the usage endpoint fails
-  (TASKS.md Phase 3) — unstarted; stale-flag + last-good is the current
-  behaviour.
-- **Native JSONL parser** to drop the Node/ccusage dependency — optional,
-  unstarted.
 - **Phase 5 stretch** (screen cycling, calendar countdown, theming) —
-  unstarted.
+  unstarted; features, not fixes.
+
+Closed later the same day (see "Native transcripts" below): the JSONL
+fallback for the 5-hour window and the native parser that retires ccusage.
 
 Fixed today, outside git: the `.venv` had been carried over from a checkout
 at `~/Downloads/display/claude-trofeo-hud`, so every console script's shebang
@@ -52,6 +50,35 @@ at `~/Downloads/display/claude-trofeo-hud`, so every console script's shebang
 `uv run pytest` failed with `ModuleNotFoundError`. `uv sync --reinstall`
 rewrote them; 129 tests pass, ruff clean. The launchd agent itself was
 unaffected (it invokes `.venv/bin/python3 -m trofeo_hud`).
+
+## Native transcripts + session fallback (2026-08-18)
+
+Plan: [plans/archive/native-transcripts.md](plans/archive/native-transcripts.md).
+
+- **`collectors/transcripts.py`** — one incremental, thread-safe
+  `TranscriptLog` over `~/.claude/projects/**/*.jsonl` shared by all three
+  collectors. Dedupes on `message.id`+`requestId` (48% of assistant lines in
+  this account's logs were repeats — the old `activity.py` double-counted burn
+  rate and the sparkline), reads subagent transcripts (the old glob was one
+  level deep), and emits `advisor_message` iterations as their own events —
+  Claude Code leaves those out of the top-level `usage`, ccusage counts them.
+  Validated against ccusage 20.0.20: cache read/write per day match exactly,
+  input within 0.02% once advisor iterations are included. First pass over a
+  week of logs: 0.17 s; incremental tick: ~30 ms.
+- **`pricing.py`** — Anthropic list rates by model prefix (dated in the file);
+  cache write ×1.25 / ×2 (5m / 1h), read ×0.1. Unknown model → $0, logged once.
+- **`tokens.py`** no longer shells out. Node is not a requirement any more;
+  the launchd plist no longer bakes an `npx` path; first-frame wait dropped
+  from 90 s to 20 s.
+- **`limits.py` fallback** — on refresh failure or auth expiry the session
+  gauge is re-estimated from transcripts: block reset from timestamps
+  (`estimate_session`, chained blocks, re-anchors after any ≥5 h gap), and
+  while the last good sample's window is live its percentage is scaled by
+  cost accrued since (`_Sample`). Labelled `Current session (est.)`; a fresh
+  sample restores the server's label. Without a log the collector behaves as
+  before (tests exercise both).
+
+Tests: 185. New modules at 100% line coverage.
 
 ## Current work
 
@@ -89,17 +116,16 @@ not merged them; each is now cherry-picked onto `m-kk/trofeo-hud` `main`
 [#7](https://github.com/christensen143/claude-trofeo-hud/pull/7) (5-minute
 poll cadence) was already on `main` as its own commit.
 
-Tests: 129.
+Tests: 129 at that point.
 
 ## Review follow-ups — closed 2026-08-18
 
 The items the remediation PRs left open, all now resolved on `main`:
 
 1. **Week-window mismatch** — `tokens.py` now sums the trailing seven
-   calendar days (`--since` today−6) and the panel labels it `7 DAYS`, so it
-   sits honestly beside the rolling 7-day gauge. Residual: ccusage buckets by
-   calendar day, so the two can still differ by the partial day at the
-   window's start.
+   calendar days and the panel labels it `7 DAYS`, so it sits honestly beside
+   the rolling 7-day gauge. Residual: the sum is by local calendar day, so
+   the two can still differ by the partial day at the window's start.
 2. **`jpeg_quality`** is threaded from `Config` through `run_loop` to
    `TrofeoPanel.send(quality=…)` instead of being hardcoded at 90.
 3. **`progress_bar` small fills** are drawn true to size — inside the left cap

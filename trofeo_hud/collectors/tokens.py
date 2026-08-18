@@ -1,63 +1,50 @@
-"""Tokens & hypothetical cost via ccusage (npx). 60s cadence.
+"""Tokens & hypothetical cost from the transcript log. 60s cadence.
 
-ccusage parses ~/.claude/projects JSONL with battle-tested dedupe and
-LiteLLM pricing; we just read its JSON. A native parser can replace this
-later to drop the Node dependency.
+Reads the shared `TranscriptLog` (deduped, subagents and advisor calls
+included) and prices each event at Anthropic list rates. Days are local
+calendar days; the week is the trailing seven of them, so the figure sits
+honestly beside the rolling 7-day gauge.
 """
 
 from __future__ import annotations
 
 import dataclasses
-import json
 import logging
-import subprocess
-from datetime import date, timedelta
+from datetime import timedelta
 
+from .. import pricing
 from ..state import TokenStats
+from . import transcripts as tx
 from .base import Collector
 
 log = logging.getLogger(__name__)
-
-# Pinned deliberately. `-y` suppresses npm's install prompt, so a floating tag
-# would have the daemon fetch and execute whatever was most recently published
-# under this name — unreviewed, every 60 s, in a process that reads the OAuth
-# token from a Keychain item the user was told to grant "Always Allow".
-# Bumping this version is a reviewed commit; see tests/test_tokens.py.
-_CCUSAGE_VERSION = "20.0.20"
-_CMD = ["npx", "-y", f"ccusage@{_CCUSAGE_VERSION}", "daily", "--json", "--since"]
-# Exceeds cadence_s on purpose: a cold npx run plus a full log parse can be
-# slow. Note this makes the 60 s cadence a floor, not a period — `Collector.run`
-# only starts waiting once refresh() returns.
-_TIMEOUT_S = 120
 
 
 class TokensCollector(Collector):
     name_ = "tokens"
     cadence_s = 60.0
 
-    def refresh(self) -> None:
-        # Trailing seven calendar days, so the figure sits honestly beside
-        # the rolling 7-day gauge (a Monday-anchored week disagreed with it).
-        week_start = date.today() - timedelta(days=6)
-        cmd = _CMD + [week_start.strftime("%Y%m%d")]
-        out = subprocess.run(
-            cmd, capture_output=True, text=True, timeout=_TIMEOUT_S, check=True
-        ).stdout
-        days = json.loads(out).get("daily", [])
+    def __init__(self, shared, log: tx.TranscriptLog | None = None) -> None:
+        super().__init__(shared)
+        self.log = log if log is not None else tx.TranscriptLog(tx.PROJECTS_DIR)
 
-        today_key = date.today().isoformat()
+    def refresh(self) -> None:
+        now = tx.local_now()
+        self.log.ingest(now)
+        midnight = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        week_start = midnight - timedelta(days=6)
+
         stats = TokenStats()
-        for day in days:
-            stats.week_tokens += day.get("totalTokens", 0)
-            stats.week_cost_usd += day.get("totalCost", 0.0)
-            if day.get("period") == today_key:
-                stats.today_tokens = day.get("totalTokens", 0)
-                stats.today_cost_usd = day.get("totalCost", 0.0)
-                stats.input_tokens = day.get("inputTokens", 0)
-                stats.output_tokens = day.get("outputTokens", 0)
-                stats.cache_tokens = day.get("cacheReadTokens", 0) + day.get(
-                    "cacheCreationTokens", 0
-                )
+        for ev in self.log.events(since=week_start):
+            cost = pricing.cost_usd(ev)
+            stats.week_tokens += ev.total
+            stats.week_cost_usd += cost
+            if ev.ts >= midnight:
+                stats.today_tokens += ev.total
+                stats.today_cost_usd += cost
+                stats.input_tokens += ev.input
+                stats.output_tokens += ev.output
+                stats.cache_tokens += ev.cache_read + ev.cache_write
 
         def apply(state) -> None:
             stats.session_count = state.tokens.session_count  # activity owns it
