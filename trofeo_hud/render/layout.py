@@ -145,7 +145,7 @@ def _reset_line(
         (xr, y),
         f"in {w.fmt_countdown(secs)}",
         font=theme.mono(19),
-        fill=theme.FAINT,
+        fill=theme.MUTED,
         anchor="ra",
     )
 

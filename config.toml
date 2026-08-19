@@ -1,7 +1,7 @@
 # trofeo-hud configuration (all fields optional)
 
-fps = 2.0
-jpeg_quality = 90
+fps = 1.0
+jpeg_quality = 100
 
 [night]
 # "on" = always normal, "dim" = dimmed during quiet hours, "off" = black screen
